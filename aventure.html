@@ -3,41 +3,589 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Aventurier de Mirval — JDR interactif</title>
+<title>Aventurier de Mirval — Edition Étendue</title>
 <meta name="theme-color" content="#0e0f13" />
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-body {font-family: system-ui, sans-serif;background: #0e0f13;color: #e5e7eb;margin: 0;padding: 0;}
-#game {max-width: 600px;margin: auto;padding: 1rem;}
-button {display: block;margin: 0.5rem 0;padding: 12px 16px;font-size: 16px;border-radius: 8px;border: none;background: #2563eb;color: white;cursor: pointer;}
-button:hover { background: #1d4ed8; }
-.choices { margin-top: 1rem; }
-.log {margin-top: 1rem;padding: 1rem;background: #131722;border-radius: 8px;height: 200px;overflow-y: auto;font-size: 14px;}
-.stats { margin-top: 1rem; font-size: 14px; }
+  :root{
+    --bg:#0e0f13; --panel:#171923; --accent:#6ee7b7; --muted:#a6b0c0; --danger:#ef4444; --warn:#f59e0b; --ok:#22c55e; --info:#60a5fa;
+    --text:#e5e7eb; --btn:#1f2937; --btn-hover:#273244; --card:#11131a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0e0f13;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Noto Sans",Arial}
+  .wrap{max-width:980px;margin:0 auto;padding:16px}
+  header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+  h1{margin:0;font-size:clamp(1.2rem,2.8vw,1.8rem)}
+  .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0b1220;border:1px solid #1f2a3a;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:290px 1fr;gap:14px}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,#151826,#0f1320);border:1px solid #273244;border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+  .title{display:flex;align-items:center;gap:10px}
+  .title h2{margin:0;font-size:1.05rem}
+  .meta{color:var(--muted);font-size:12px}
+  .stat{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:6px 0;padding:8px 10px;border-radius:10px;background:linear-gradient(180deg,#111422,#0c101b);border:1px solid #222a3a}
+  .bar{height:10px;background:#0b0e15;border-radius:999px;overflow:hidden;border:1px solid #2a3448}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,#60a5fa,#34d399);width:50%}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:#0f1422;border:1px solid #22304a;color:#b9c2d0;border-radius:999px;padding:4px 8px;font-size:12px}
+  .inv{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .log{height:240px;overflow:auto;background:linear-gradient(180deg,#0d111b,#0a0f18);border:1px solid #213049;border-radius:12px;padding:10px;font-size:14px}
+  .log p{margin:0 0 8px}
+  .log .sys{color:#9aa3b2}
+  .log .good{color:var(--ok)}
+  .log .bad{color:var(--danger)}
+  .log .warn{color:var(--warn)}
+  .log .info{color:var(--info)}
+  .divider{height:1px;background:#243044;margin:10px 0}
+  .choices{display:grid;gap:10px;margin-top:10px}
+  button{
+    appearance:none;border:0;background:var(--btn);color:#e7ecf5;padding:15px 18px;border-radius:12px;cursor:pointer;
+    border:1px solid #2c3a54; transition:transform .05s ease, background .12s ease, border-color .12s ease;
+    text-align:left;font-size:18px;line-height:1.3
+  }
+  button:hover{background:var(--btn-hover);border-color:#3a4a68}
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:#1c2a3d;border-color:#3a4a68}
+  .btn-danger{background:#3a1f22;border-color:#6b2d33}
+  .btn-ghost{background:transparent;border-color:#334155}
+  .footer{margin-top:10px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:#9aa3b2;font-size:12px}
+  .highlight{color:var(--accent)}
 </style>
 </head>
 <body>
-<div id="game">
-  <h1>Aventurier de Mirval</h1>
-  <div id="story"></div>
-  <div class="choices" id="choices"></div>
-  <div class="stats" id="stats"></div>
-  <div class="log" id="log"></div>
-</div>
+  <div class="wrap">
+    <header>
+      <h1>🗡️ Aventurier de Mirval — Édition Étendue</h1>
+      <span class="badge">JDR solo — Choix dynamiques, combats & états 🎲</span>
+    </header>
+
+    <div class="grid">
+      <!-- FEUILLE DE PERSO -->
+      <aside class="panel">
+        <div class="title"><h2>Personnage</h2><span class="meta" id="seedInfo"></span></div>
+        <div class="stat"><b>Nom</b><span id="p-name">Eldarion</span></div>
+        <div class="stat"><b>Classe</b><span id="p-class">—</span></div>
+        <div class="stat">
+          <b>Vie</b><span><span id="hp">20</span>/<span id="hpmax">20</span></span>
+          <div class="bar" style="grid-column:1 / -1;"><i id="hpbar" style="width:100%"></i></div>
+        </div>
+        <div class="stat"><b>Or</b><span id="gold">10</span></div>
+        <div class="stat"><b>Niveau</b><span id="lvl">1</span></div>
+        <div class="stat"><b>Expérience</b><span id="xp">0</span></div>
+        <div class="stat"><b>États</b><span id="status">—</span></div>
+        <div class="divider"></div>
+        <div class="title"><h2>Équipement</h2></div>
+        <div class="inv" id="inventory"></div>
+        <div class="divider"></div>
+        <div class="title"><h2>Actions rapides</h2></div>
+        <div class="chips">
+          <button id="btn-save" class="btn-ghost">💾 Sauvegarder</button>
+          <button id="btn-load" class="btn-ghost">📂 Charger</button>
+          <button id="btn-reset" class="btn-danger">♻️ Recommencer</button>
+        </div>
+      </aside>
+
+      <!-- HISTOIRE + CHOIX -->
+      <main class="panel">
+        <div class="title"><h2 id="location">Lisière de la forêt de Mirval</h2><span class="meta" id="day">Jour 1 — Aube</span></div>
+        <div class="log" id="log"></div>
+        <div class="divider"></div>
+        <div class="title"><h2>Que fais-tu ?</h2></div>
+        <div class="choices" id="choices"></div>
+        <div class="footer">
+          <div>Les <span class="highlight">jets de dés (1d20)</span> influencent combats et événements. Mort = <b>permadeath</b>.</div>
+          <div id="lastRoll" class="meta"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
 <script>
-let state = {hp: 20,gold: 10,weapon: "vieille épée",armor: "petite armure"};
-const story=document.getElementById("story"),choices=document.getElementById("choices"),stats=document.getElementById("stats"),log=document.getElementById("log");
-function updateStats(){stats.innerText=`❤️ Vie: ${state.hp} | 🪙 Or: ${state.gold} | ⚔️ Arme: ${state.weapon} | 🛡️ Armure: ${state.armor}`;}
-function logMsg(msg){const p=document.createElement("p");p.innerText=msg;log.appendChild(p);log.scrollTop=log.scrollHeight;}
-function newScene(text, options){story.innerHTML=`<p>${text}</p>`;choices.innerHTML="";options.forEach(opt=>{const btn=document.createElement("button");btn.innerText=opt.text;btn.onclick=opt.action;choices.appendChild(btn);});updateStats();}
-function rollDice(sides=20){return Math.floor(Math.random()*sides)+1;}
-function start(){newScene("Tu es Eldarion, un aventurier... le chemin se divise en trois :",[{text:"1. Le chemin ombragé",action:()=>marais()},{text:"2. Le sentier lumineux",action:()=>clairiere()},{text:"3. Le passage rocailleux",action:()=>colline()}]);}
-function marais(){let r=rollDice();if(r>10){state.hp-=4;logMsg("💀 Tu t'enlises (-4 PV).");}else{state.gold+=5;logMsg("✨ Tu trouves 5 pièces d'or !");}start();}
-function clairiere(){logMsg("🌼 Tu te reposes (+3 PV).");state.hp+=3;start();}
-function colline(){let r=rollDice();if(r>=12){state.weapon="épée affûtée";logMsg("⚔️ Tu trouves une épée affûtée !");}else{state.hp-=2;logMsg("💥 Des pierres te blessent (-2 PV).");}start();}
-start();
-if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js');});}
-</script></body></html>
+/* ========== Wake Lock anti-veille ========== */
+let wakeLock;
+async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
+if('wakeLock' in navigator) keepAwake();
+
+/* ========== RNG xorshift ========== */
+const rng = (() => {
+  const seed = (crypto.getRandomValues?crypto.getRandomValues(new Uint32Array(1))[0]^Date.now():Date.now())>>>0;
+  let s = seed>>>0;
+  function rand(){ s ^= s<<13; s>>>=0; s ^= s>>17; s>>>=0; s ^= s<<5; s>>>=0; return (s>>>0)/0xFFFFFFFF; }
+  function between(min,max){ return Math.floor(rand()*(max-min+1))+min; }
+  return {rand, between, seed};
+})();
+document.getElementById('seedInfo').textContent = `seed ${rng.seed}`;
+
+/* ========== UI refs ========== */
+const ui = {
+  log: document.getElementById('log'),
+  choices: document.getElementById('choices'),
+  hp: document.getElementById('hp'),
+  hpmax: document.getElementById('hpmax'),
+  hpbar: document.getElementById('hpbar'),
+  gold: document.getElementById('gold'),
+  lvl: document.getElementById('lvl'),
+  xp: document.getElementById('xp'),
+  inv: document.getElementById('inventory'),
+  loc: document.getElementById('location'),
+  day: document.getElementById('day'),
+  lastRoll: document.getElementById('lastRoll'),
+  status: document.getElementById('status'),
+  pclass: document.getElementById('p-class'),
+  pname: document.getElementById('p-name'),
+};
+
+function write(text, cls=""){
+  const p=document.createElement('p'); if(cls) p.classList.add(cls);
+  p.innerHTML=text; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight;
+}
+function clearChoices(){ ui.choices.innerHTML=""; }
+function addChoice(label, handler, meta="", primary=false){
+  const btn=document.createElement('button');
+  if(primary) btn.classList.add('btn-primary');
+  btn.innerHTML = label + (meta? `<div class="meta">${meta}</div>` : "");
+  btn.onclick = handler;
+  ui.choices.appendChild(btn);
+}
+function setStats(){
+  ui.hp.textContent = state.hp; ui.hpmax.textContent=state.hpMax;
+  ui.hpbar.style.width = Math.max(0,Math.min(100,Math.round(state.hp/state.hpMax*100)))+'%';
+  ui.gold.textContent = state.gold; ui.lvl.textContent = state.level; ui.xp.textContent = state.xp;
+  ui.status.textContent = state.status.length? state.status.map(s=>s.name).join(', ') : '—';
+  ui.pclass.textContent = state.cls; ui.pname.textContent = state.name;
+  ui.inv.innerHTML="";
+  state.inventory.forEach(it=>{
+    const d=document.createElement('div'); d.className='stat';
+    d.innerHTML = `<b>${it.name}</b><span>${it.desc}</span>`;
+    ui.inv.appendChild(d);
+  });
+}
+function d20(mod=0){ const roll=rng.between(1,20); const total=roll+mod; ui.lastRoll.textContent=`Dernier jet: d20(${mod>=0?'+':''}${mod}) → ${roll} = ${total}`; return {roll,total}; }
+function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`, "good"); }
+function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`, "bad"); if(state.hp<=0){ gameOver(); return true; } return false; }
+function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n} (total: ${state.gold})`, n>=0?"good":"warn"); }
+function gainXP(n){ state.xp+=n; write(`XP +${n} (total ${state.xp})`,"info"); const need=20+(state.level-1)*15; if(state.xp>=need){ state.level++; state.xp=0; state.hpMax+=5; state.hp=state.hpMax; write(`<b>Niveau ${state.level} !</b> PV max +5, PV restaurés.`,"good"); } setStats(); }
+function addItem(name,desc){ state.inventory.push({name,desc}); setStats(); write(`Tu obtiens <b>${name}</b> — <span class="meta">${desc}</span>`,"good"); }
+function hasItem(name){ return state.inventory.some(i=>i.name===name); }
+function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
+
+/* ========== Save / Load avec permadeath ========== */
+function save(){ localStorage.setItem('mirval.save', JSON.stringify(state)); write("Sauvegarde effectuée.","sys"); }
+function load(){
+  try{ const raw=localStorage.getItem('mirval.save'); if(!raw) return null; const obj=JSON.parse(raw); return obj&&typeof obj==='object'?obj:null; }
+  catch(e){ return null; }
+}
+function reset(){ state = initialState(); ui.log.innerHTML=""; setup(true); write("Nouvelle aventure !","sys"); }
+document.getElementById('btn-save').onclick=save;
+document.getElementById('btn-load').onclick=()=>{ const s=load(); if(s){ state=s; ui.log.innerHTML=""; setup(); write("Sauvegarde chargée.","sys"); } else write("Aucune sauvegarde.","warn"); };
+document.getElementById('btn-reset').onclick=reset;
+
+/* ========== États (poison / saignement) ========== */
+function tickStatus(){
+  let msgs=[];
+  state.status = state.status.filter(st=>{
+    if(st.type==='poison'){ const dmg=rng.between(1,2); damage(dmg,"Poison"); st.dur--; msgs.push(`☠️ Poison -${dmg} PV`); }
+    if(st.type==='bleed'){ const dmg=2; damage(dmg,"Saignement"); st.dur--; msgs.push(`🩸 Saignement -${dmg} PV`); }
+    return st.dur>0 && state.hp>0;
+  });
+  if(msgs.length) write(msgs.join(' • '),"warn");
+}
+
+/* ========== Combat avancé ========== */
+function combat(mon){
+  clearChoices(); state.inCombat=true; state.enemy=JSON.parse(JSON.stringify(mon));
+  write(`<b>${mon.name}</b> apparaît ! ❤️ ${mon.hp} — CA ${mon.ac}`,"warn");
+  combatTurn();
+}
+function combatTurn(){
+  if(!state.inCombat) return;
+  if(state.hp<=0){ gameOver(); return; }
+  if(state.enemy.hp<=0){ write(`<b>${state.enemy.name} est vaincu !</b>`,"good"); afterCombat(); return; }
+
+  clearChoices();
+  const e = state.enemy;
+  const info = `Ennemi: ${e.name} — PV ${e.hp}/${e.maxHp} — CA ${e.ac}`;
+  addChoice(`Attaquer 🗡️`, ()=>{
+    const atkMod = state.cls==='Guerrier'?2: (hasItem("Épée affûtée")?1:0);
+    const roll = d20(atkMod); 
+    if(roll.roll===20){ const dmg=e.tier+6; e.hp-=dmg; write(`🎯 Critique ! -${dmg} PV.`, "good"); }
+    else if(roll.total>=e.ac){ const dmg=rng.between(e.tier+2,e.tier+5); e.hp-=dmg; write(`Tu touches (${roll.total} ≥ ${e.ac}) : -${dmg} PV.`,"good"); }
+    else write(`Tu rates (${roll.total} < ${e.ac}).`,"warn");
+    if(e.hp>0) enemyAttack();
+    else combatTurn();
+  }, info, true);
+
+  addChoice(`Parer 🛡️`, ()=>{
+    const bonus = state.cls==='Rôdeur'?2:1;
+    const m = d20(e.hitMod).total;
+    const armor = 12 + bonus + (hasItem("Bouclier en bois")?1:0) + (hasItem("Bouclier en fer")?2:0);
+    if(m>=armor){ const dmg=Math.max(0,rng.between(1,3+e.tier)-2-bonus); write(`Parade partielle, -${dmg} PV.`,"warn"); damage(dmg,e.name); }
+    else write("Tu pares complètement !","good");
+    combatTurn();
+  });
+
+  addChoice(`Compétence (${state.skill.cd?`recharge ${state.skill.cd}`:state.skill.name}) ✨`, ()=>{
+    if(state.skill.cd){ write("Compétence en recharge.","warn"); return combatTurn(); }
+    state.skill.use(e);
+    state.skill.cd = state.skill.cooldown;
+    if(e.hp>0) enemyAttack();
+    combatTurn();
+  }, state.skill.desc);
+
+  addChoice(`Potion 🧪 (${state.potions})`, ()=>{
+    if(state.potions<=0){ write("Plus de potions.","warn"); return combatTurn(); }
+    state.potions--; heal(rng.between(8,12));
+    enemyAttack(); combatTurn();
+  });
+
+  addChoice(`Fuir 🏃`, ()=>{
+    const r=d20().total;
+    if(r>=14){ write("Tu fuis le combat.","sys"); state.inCombat=false; state.enemy=null; explore(); }
+    else { write("Échec de fuite !","bad"); enemyAttack(); combatTurn(); }
+  });
+}
+function enemyAttack(){
+  const e=state.enemy;
+  // chance d'appliquer un état selon l'ennemi
+  const special = rng.rand();
+  const roll = d20(e.hitMod).total;
+  const def = 10 + (hasItem("Petite armure")?1:0) + (hasItem("Cuir renforcé")?2:0) + (hasItem("Bouclier en fer")?2:0);
+  if(roll>=def){
+    const dmg=rng.between(1,3+e.tier);
+    damage(dmg,e.name);
+    if(special<e.dotChance){
+      if(e.dotType==='poison') state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)});
+      if(e.dotType==='bleed')  state.status.push({type:'bleed',  name:'Saignement', dur:rng.between(2,4)});
+      write(`⚠️ ${e.name} inflige ${e.dotType==='poison'?'un poison':'un saignement'} !`,"warn");
+    }
+  }else write(`${e.name} rate son attaque.`, "info");
+  tickStatus();
+}
+function afterCombat(){
+  const e=state.enemy; state.inCombat=false; state.enemy=null;
+  const gold=rng.between(e.tier, e.tier*3); const xp=rng.between(e.tier*3, e.tier*6);
+  changeGold(gold); gainXP(xp);
+
+  // Butin (rareté)
+  const r=rng.rand();
+  if(r<0.2 && !hasItem("Épée affûtée")) addItem("Épée affûtée","+1 attaque");
+  else if(r<0.35 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois","+1 armure légère");
+  else if(r<0.45) { state.potions++; write("Tu trouves une potion.","good"); }
+  else if(r<0.5 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple");
+
+  // Avancement de quête : rumeurs du chef bandit
+  if(e.name.includes("Bandit")){ state.flags.rumors = (state.flags.rumors||0)+1; if(state.flags.rumors>=3 && !state.flags.bossUnlocked){ state.flags.bossUnlocked=true; write("🗡️ Tu apprends la cache du Chef Bandit… (événement rare débloqué)","info"); } }
+
+  explore();
+}
+
+/* ========== Monde / exploration dynamique ========== */
+function setTime(){
+  const slots=["Aube","Matin","Midi","Après-midi","Crépuscule","Nuit"];
+  const idx=slots.indexOf(state.time); let n=(idx+1)%slots.length; if(n===0) state.day++;
+  state.time=slots[n]; ui.day.textContent=`Jour ${state.day} — ${state.time}`;
+}
+function explore(initial=false){
+  setStats(); ui.loc.textContent = state.location; ui.day.textContent=`Jour ${state.day} — ${state.time}`; clearChoices();
+  if(!initial) setTime(); // avance le temps à chaque "tour" d'explo
+  tickStatus(); if(state.hp<=0) return;
+
+  // table de rencontres pondérées par biome courant
+  const zone = state.locationKey;
+  let pool = [];
+
+  const base = [
+    { label:"Fouiller 🔍", act:searchArea, w:2, meta:"Trouvailles / pièges" },
+    { label:"Se reposer 💤", act:rest, w:1, meta:"Risque d'embuscade" },
+    { label:"Utiliser un objet 🎒", act:useItemMenu, w:1, meta:"Potions & objets" }
+  ];
+
+  // PNJ
+  pool.push({ label:"Rencontrer Lyanna l'herboriste", act:eventHerbalist, w: zone==='clairiere'?3:1, meta:"+Soin / Achat" });
+  pool.push({ label:"Croiser Garruk le forgeron", act:eventSmith, w: zone==='colline'?3:1, meta:"+Améliorations" });
+
+  // Combats selon biome
+  if(zone==='marais'){
+    pool.push({label:"Rôder dans le marais (combat)", act:()=>combat(mobTemplates.ghoul()), w:3, meta:"Poison possible"});
+    pool.push({label:"Feux-follets lointains", act:eventBog, w:2, meta:"Chance / danger"});
+  } else if(zone==='clairiere'){
+    pool.push({label:"Chasser près de la clairière (combat)", act:()=>combat(mobTemplates.boar()), w:2, meta:"Charge brutale"});
+    pool.push({label:"Autel moussue", act:eventShrine, w:2, meta:"Bénédiction / malédiction"});
+  } else if(zone==='colline'){
+    pool.push({label:"Affronter une harpie (combat)", act:()=>combat(mobTemplates.harpy()), w:3, meta:"Saignement possible"});
+    pool.push({label:"Visiter l'ermite", act:eventHermit, w:2, meta:"Chance / breloque"});
+  }
+
+  // Boss si débloqué
+  if(state.flags.bossUnlocked) pool.push({label:"Traquer le Chef Bandit (boss)", act:()=>combat(mobTemplates.banditChief()), w:1, meta:"Difficile !"});
+
+  // Construit 3 à 4 choix dynamiques
+  const dyn = pickWeighted(pool, 3 + (rng.rand()<0.3?1:0));
+  const all = shuffle([...base, ...dyn]).slice(0,4);
+
+  // Affiche les choix
+  all.forEach((c,i)=> addChoice(c.label, c.act, c.meta, i===0));
+  // Navigation de zone
+  addChoice("→ Marais de Vire-Saule", ()=>gotoZone('marais'));
+  addChoice("→ Clairière des Lys", ()=>gotoZone('clairiere'));
+  addChoice("→ Colline de Rocfauve", ()=>gotoZone('colline'));
+}
+
+/* ========== Utilitaires pool/poids ========== */
+function shuffle(a){ return a.map(x=>[rng.rand(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]); }
+function pickWeighted(items, k){
+  const total = items.reduce((s,i)=>s+(i.w||1),0);
+  const res=[];
+  for(let n=0;n<k;n++){
+    let r=rng.rand()*total, acc=0;
+    for(const it of items){ acc+= (it.w||1); if(r<=acc){ res.push(it); break; } }
+  }
+  // petite déduplication visuelle
+  return res.filter((v,i,self)=> self.findIndex(x=>x.label===v.label)===i);
+}
+
+/* ========== Actions utilitaires ========== */
+function searchArea(){
+  clearChoices();
+  const bonus = hasItem("Lame de chêne")?1:0;
+  const {total} = d20(bonus);
+  if(total>=18){ write("🔑 Recherche exceptionnelle : tu trouves un coffre scellé.","good"); chest(); }
+  else if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); }
+  else if(total>=8){ write("Des traces fraîches… une rencontre approche."); if(rng.rand()<0.5) randomEncounter(); }
+  else { write("Aïe ! Ronce traîtresse.","bad"); damage(rng.between(1,3),"Ronces"); }
+  continueBtn();
+}
+function rest(){
+  clearChoices();
+  if(rng.rand()<0.35){ write("Quelque chose approche pendant ton repos…","warn"); randomEncounter(); }
+  else { heal(rng.between(4,8)); write("Tu dors un peu. Ça fait du bien.","good"); }
+  continueBtn();
+}
+function useItemMenu(){
+  clearChoices();
+  addChoice(`Boire une potion 🧪 (${state.potions})`, ()=>{
+    if(state.potions<=0) { write("Tu n'as pas de potion.","warn"); return continueBtn(); }
+    state.potions--; heal(rng.between(8,12)); continueBtn();
+  });
+  addChoice("Rien pour l'instant", continueBtn);
+}
+function chest(){
+  const r=rng.between(1,100);
+  if(r>90){ addItem("Bouclier en fer","+2 armure"); }
+  else if(r>70){ addItem("Potion de soin","Rest. 8-12 PV"); state.potions++; }
+  else if(r>40){ changeGold(rng.between(7,15)); }
+  else { write("💥 Piège !","bad"); damage(rng.between(3,6),"Piège"); }
+}
+function randomEncounter(){
+  const roll=rng.rand();
+  if(roll<0.5) { // combat random selon zone
+    const zone=state.locationKey;
+    if(zone==='marais') combat(mobTemplates.wolf());
+    else if(zone==='clairiere') combat(mobTemplates.bandit());
+    else combat(mobTemplates.harpy());
+  }else{
+    [eventShrine,eventHerbalist,eventSmith,eventHermit][rng.between(0,3)]();
+  }
+}
+function continueBtn(){ addChoice("Continuer", ()=>explore()); }
+
+/* ========== PNJ & Événements ========== */
+function eventHerbalist(){
+  write("🌿 Lyanna, herboriste, t'interpelle avec douceur.");
+  clearChoices();
+  addChoice("Soins (3 or)", ()=>{
+    if(state.gold>=3){ changeGold(-3); heal(rng.between(6,12)); write("Lyanna applique des onguents parfumés.","good"); }
+    else write("Tu n'as pas assez d'or.","warn");
+    continueBtn();
+  }, "+6-12 PV");
+  addChoice("Acheter potion (5 or)", ()=>{
+    if(state.gold>=5){ changeGold(-5); state.potions++; write("Tu obtiens une potion de soin.","good"); }
+    else write("Fonds insuffisants.","warn");
+    continueBtn();
+  });
+  addChoice("Demander une herbe rare (jet)", ()=>{
+    const {total} = d20();
+    if(total>=15){ state.hpMax+=2; heal(2); write("Herbe de Mirval : PV max +2.","good"); }
+    else write("Elle ne trouve rien de spécial aujourd'hui.","info");
+    continueBtn();
+  });
+}
+function eventSmith(){
+  write("⚒️ Garruk, le forgeron errant, examine tes armes.");
+  clearChoices();
+  addChoice("Renforcer l'épée (5 or)", ()=>{
+    if(state.gold>=5){ changeGold(-5); addItem("Épée affûtée","+1 attaque"); }
+    else write("Pas assez d'or.","warn");
+    continueBtn();
+  });
+  addChoice("Forger un bouclier (6 or)", ()=>{
+    if(state.gold>=6){ changeGold(-6); addItem("Bouclier en fer","+2 armure"); }
+    else write("Pas assez d'or.","warn");
+    continueBtn();
+  });
+  addChoice("Discuter (lore) → +3 XP", ()=>{ gainXP(3); continueBtn(); });
+}
+function eventShrine(){
+  write("⛪ Un autel ancien diffuse une lueur incertaine.");
+  clearChoices();
+  addChoice("Prier", ()=>{
+    if(rng.rand()<0.5){ heal(rng.between(4,8)); write("Une chaleur bienfaisante t'envahit.","good"); }
+    else { damage(rng.between(2,4),"Mauvais présage"); }
+    continueBtn();
+  });
+  addChoice("Désacraliser (risqué)", ()=>{
+    const {total}=d20(-1);
+    if(total>=16){ changeGold(rng.between(8,16)); write("Tu récupères quelques gemmes.","good"); }
+    else { damage(rng.between(4,7),"Malédiction"); }
+    continueBtn();
+  });
+  addChoice("Partir en silence", ()=>{ write("Tu respectes le lieu.", "info"); continueBtn(); });
+}
+function eventHermit(){
+  write("🧙 Un ermite t'offre une décoction puissante.");
+  clearChoices();
+  addChoice("Boire", ()=>{
+    if(rng.rand()<0.6){ heal(rng.between(5,10)); gainXP(3); }
+    else { damage(rng.between(2,5),"Nausée"); }
+    continueBtn();
+  });
+  addChoice("Acheter breloque (5 or)", ()=>{
+    if(state.gold>=5){ changeGold(-5); addItem("Breloque d'ermite","10% d'annuler un mal"); state.flags.charm=1;}
+    else write("Pas assez d'or.","warn");
+    continueBtn();
+  });
+  addChoice("Refuser poliment", ()=>{ write("Tu déclines et remercies l'ermite.","info"); continueBtn(); });
+}
+function eventBog(){
+  write("🌫️ Brouillard épais, feux-follets dansants...");
+  clearChoices();
+  addChoice("Suivre les lueurs", ()=>{
+    const {total}=d20();
+    if(total>=15){ write("Un îlot sûr avec un coffre !","good"); chest(); }
+    else { damage(rng.between(2,5),"Vase"); }
+    continueBtn();
+  });
+  addChoice("Rebrousser chemin", ()=>{ write("Tu conserves tes forces.","info"); continueBtn(); });
+}
+
+/* ========== Mob templates ========== */
+const mobTemplates = {
+  wolf: ()=>({ name:"Loup affamé", hp:10, maxHp:10, ac:11, hitMod:2, tier:1, dotChance:0, dotType:null }),
+  bandit: ()=>({ name:"Bandit des fourrés", hp:12, maxHp:12, ac:12, hitMod:3, tier:2, dotChance:0.1, dotType:'bleed' }),
+  boar: ()=>({ name:"Sanglier irascible", hp:11, maxHp:11, ac:11, hitMod:2, tier:1, dotChance:0.05, dotType:'bleed' }),
+  harpy: ()=>({ name:"Harpie du vent", hp:14, maxHp:14, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'bleed' }),
+  ghoul: ()=>({ name:"Goule des roseaux", hp:13, maxHp:13, ac:12, hitMod:3, tier:2, dotChance:0.25, dotType:'poison' }),
+  banditChief: ()=>({ name:"Chef Bandit", hp:22, maxHp:22, ac:14, hitMod:5, tier:3, dotChance:0.3, dotType:'bleed' }),
+};
+
+/* ========== Zones ========== */
+function gotoZone(key){
+  state.locationKey=key;
+  state.location = key==='marais'?"Marais de Vire-Saule": key==='clairiere'?"Clairière des Lys":"Colline de Rocfauve";
+  write(`👉 Tu te diriges vers ${state.location}.`,"sys");
+  explore(true);
+}
+
+/* ========== Création de personnage (classes & compétences) ========== */
+function chooseClass(){
+  clearChoices();
+  write("Choisis ta classe :","info");
+  addChoice("🛡️ Guerrier — Compétence : <b>Frappe vaillante</b> (gros dégâts)", ()=>{
+    state.cls="Guerrier"; state.skill={name:"Frappe vaillante", cooldown:3, cd:0, desc:"Attaque puissante (2d6 + niveau)", use:(e)=>{ const dmg=rng.between(2,6)+rng.between(2,6)+state.level; e.hp-=dmg; write(`💥 Frappe vaillante : -${dmg} PV !`,"good"); }}; startAdventure();
+  }, "+2 Attaque, compétence 3 tours CD", true);
+  addChoice("🏹 Rôdeur — Compétence : <b>Tir précis</b> (touche plus facilement)", ()=>{
+    state.cls="Rôdeur"; state.skill={name:"Tir précis", cooldown:2, cd:0, desc:"+6 au jet, 1d8 dégâts", use:(e)=>{ const roll=d20(6); if(roll.total>=e.ac){ const dmg=rng.between(3,8); e.hp-=dmg; write(`🏹 Tir précis touche : -${dmg} PV`,"good"); } else write("Tir manqué.","warn"); }}; startAdventure();
+  }, "+2 Parade, compétence 2 tours CD");
+  addChoice("🔮 Mystique — Compétence : <b>Onde arcanique</b> (dmg + chance status)", ()=>{
+    state.cls="Mystique"; state.skill={name:"Onde arcanique", cooldown:3, cd:0, desc:"1d8 dégâts + 30% poison", use:(e)=>{ const dmg=rng.between(3,8); e.hp-=dmg; if(rng.rand()<0.3) { state.status.push({type:'poison',name:'Poison',dur:rng.between(2,3)}); write("🔮 Tu t'infuses d'un poison volatil (te soigne ? non, applique à l'ennemi si riposte)","info"); } write(`🔮 Onde arcanique : -${dmg} PV`,"good"); }}; startAdventure();
+  }, "Compétence 3 tours CD, style risqué");
+}
+
+/* ========== Boucle temps & cooldown ========== */
+function advanceCooldown(){
+  if(state.skill && state.skill.cd) state.skill.cd = Math.max(0, state.skill.cd-1);
+}
+
+/* ========== State initial ========== */
+function initialState(){
+  return {
+    name:"Eldarion",
+    cls:"—",
+    hp:20, hpMax:20,
+    gold:10, level:1, xp:0,
+    day:1, time:"Aube",
+    location:"Lisière de la forêt de Mirval",
+    locationKey:"clairiere",
+    inventory:[
+      {name:"Vieille épée", desc:"+1 attaque (faible)"},
+      {name:"Petite armure", desc:"+1 armure (légère)"}
+    ],
+    potions:1,
+    status:[],
+    flags:{},
+    inCombat:false,
+    enemy:null,
+    skill:{name:"", cooldown:0, cd:0, desc:"", use:()=>{}}
+  };
+}
+let state = load() || initialState();
+
+/* ========== Setup ========== */
+function setup(isNew=false){
+  setStats();
+  ui.loc.textContent = state.location;
+  ui.day.textContent = `Jour ${state.day} — ${state.time}`;
+  clearChoices();
+
+  if(isNew || ui.log.childElementCount===0){
+    write("Tu es à la lisière de la forêt de Mirval. Les légendes parlent d'un Chef Bandit et d'antiques autels.", "sys");
+    chooseClass(); // nouvelle partie → choix de classe
+    return;
+  }
+
+  // boutons système
+  document.getElementById('btn-save').onclick=save;
+  document.getElementById('btn-load').onclick=()=>{ const s=load(); if(s){ state=s; ui.log.innerHTML=""; setup(); write("Sauvegarde chargée.","sys"); } else write("Aucune sauvegarde trouvée.","warn"); };
+  document.getElementById('btn-reset').onclick=reset;
+
+  explore(true);
+}
+
+/* ========== Game over (permadeath) ========== */
+function gameOver(){
+  state.inCombat=false;
+  write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
+  localStorage.removeItem('mirval.save'); // permadeath
+  clearChoices();
+  addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, "", true);
+}
+
+/* ========== Transition démarrage ========== */
+function startAdventure(){
+  ui.log.innerHTML="";
+  write("L'aventure commence ! Choisis une destination ou tente la fortune.", "info");
+  setStats();
+  explore(true);
+}
+
+/* ========== Hooks globaux ========== */
+const _damage = damage;
+damage = function(amount, source=""){
+  // Breloque : 10% d'annuler le mal
+  if(state.flags.charm && rng.rand()<0.10){ write("🔔 Ta breloque détourne le mauvais sort !","good"); return false; }
+  const dead = _damage(amount, source);
+  return dead;
+};
+
+// chaque exploration → réduit cooldown compétence
+const _explore = explore;
+explore = function(...args){ advanceCooldown(); _explore(...args); };
+
+setup(ui.log.childElementCount===0);
+</script>
+</body>
+</html>
