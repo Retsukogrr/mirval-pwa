@@ -1,2 +1,0 @@
-# mirval-pwa
-mirval-pwa
