@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aventurier de Mirval — JDR interactif</title>
+<meta name="theme-color" content="#0e0f13" />
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+body {font-family: system-ui, sans-serif;background: #0e0f13;color: #e5e7eb;margin: 0;padding: 0;}
+#game {max-width: 600px;margin: auto;padding: 1rem;}
+button {display: block;margin: 0.5rem 0;padding: 12px 16px;font-size: 16px;border-radius: 8px;border: none;background: #2563eb;color: white;cursor: pointer;}
+button:hover { background: #1d4ed8; }
+.choices { margin-top: 1rem; }
+.log {margin-top: 1rem;padding: 1rem;background: #131722;border-radius: 8px;height: 200px;overflow-y: auto;font-size: 14px;}
+.stats { margin-top: 1rem; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="game">
+  <h1>Aventurier de Mirval</h1>
+  <div id="story"></div>
+  <div class="choices" id="choices"></div>
+  <div class="stats" id="stats"></div>
+  <div class="log" id="log"></div>
+</div>
+<script>
+let state = {hp: 20,gold: 10,weapon: "vieille épée",armor: "petite armure"};
+const story=document.getElementById("story"),choices=document.getElementById("choices"),stats=document.getElementById("stats"),log=document.getElementById("log");
+function updateStats(){stats.innerText=`❤️ Vie: ${state.hp} | 🪙 Or: ${state.gold} | ⚔️ Arme: ${state.weapon} | 🛡️ Armure: ${state.armor}`;}
+function logMsg(msg){const p=document.createElement("p");p.innerText=msg;log.appendChild(p);log.scrollTop=log.scrollHeight;}
+function newScene(text, options){story.innerHTML=`<p>${text}</p>`;choices.innerHTML="";options.forEach(opt=>{const btn=document.createElement("button");btn.innerText=opt.text;btn.onclick=opt.action;choices.appendChild(btn);});updateStats();}
+function rollDice(sides=20){return Math.floor(Math.random()*sides)+1;}
+function start(){newScene("Tu es Eldarion, un aventurier... le chemin se divise en trois :",[{text:"1. Le chemin ombragé",action:()=>marais()},{text:"2. Le sentier lumineux",action:()=>clairiere()},{text:"3. Le passage rocailleux",action:()=>colline()}]);}
+function marais(){let r=rollDice();if(r>10){state.hp-=4;logMsg("💀 Tu t'enlises (-4 PV).");}else{state.gold+=5;logMsg("✨ Tu trouves 5 pièces d'or !");}start();}
+function clairiere(){logMsg("🌼 Tu te reposes (+3 PV).");state.hp+=3;start();}
+function colline(){let r=rollDice();if(r>=12){state.weapon="épée affûtée";logMsg("⚔️ Tu trouves une épée affûtée !");}else{state.hp-=2;logMsg("💥 Des pierres te blessent (-2 PV).");}start();}
+start();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js');});}
+</script></body></html>
