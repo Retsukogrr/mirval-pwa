@@ -43,7 +43,13 @@ const ui = {
 };
 
 // ---------- Utilitaires UI ----------
-function write(text, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=text; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
+function write(text, cls=""){
+  const p=document.createElement('p');
+  if(cls) p.classList.add(cls);
+  p.innerHTML=text;
+  ui.log.appendChild(p);
+  ui.log.scrollTop=ui.log.scrollHeight;
+}
 function clearChoices(){ ui.choices.innerHTML=""; }
 
 function disableAllChoices(){ ui.choices.querySelectorAll('button').forEach(b=>b.disabled=true); }
@@ -51,7 +57,10 @@ function normalizeChoices(){
   const seen=new Set();
   [...ui.choices.querySelectorAll('button')].forEach(b=>{
     const key=b.textContent.trim();
-    if(key==='Continuer'){ if(seen.has('Continuer')) b.remove(); else seen.add('Continuer'); return; }
+    if(key==='Continuer'){
+      if(seen.has('Continuer')) b.remove(); else seen.add('Continuer');
+      return;
+    }
     if(seen.has(key)) b.remove(); else seen.add(key);
   });
 }
@@ -63,9 +72,10 @@ function addChoice(label, handler, primary=false){
   const id=++_actionSerial;
   btn.addEventListener('click', ()=>{
     if(btn.disabled) return;
-    disableAllChoices();
-    try{ handler(); }catch(e){ console.error(e); write("Erreur : "+e.message,"bad"); continueBtn(); }
-  }, { once:true });
+    disableAllChoices();             // anti double-tap
+    try{ handler(); }
+    catch(e){ console.error(e); write("Erreur : "+e.message,"bad"); continueBtn(); }
+  }, { once:true });                  // une seule exécution
   ui.choices.appendChild(btn);
   normalizeChoices();
 }
@@ -109,7 +119,6 @@ function setStats(){
     ui.quests.appendChild(x);
   });
 }
-
 function d20(mod=0){ const roll=rng.between(1,20); const total=roll+mod; if(ui.lastRoll) ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${roll} = ${total}`; return {roll,total}; }
 function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`, "good"); }
 function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`, "bad"); if(state.hp<=0){ gameOver(); return true; } return false; }
@@ -207,9 +216,17 @@ function enemyAttack(){
     const dmg=rng.between(1,3+e.tier);
     damage(dmg,e.name);
     if(e.dotChance && rng.rand()<e.dotChance){
-      if(e.dotType==='poison') state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)});
-      if(e.dotType==='bleed')  state.status.push({type:'bleed',  name:'Saignement', dur:rng.between(2,4)});
-      write(`⚠️ ${e.name} inflige ${e.dotType==='poison'?'un poison':'un saignement'} !`,"warn");
+      // Breloque d’ermite : 10% d’annuler poison/saignement
+      let apply = true;
+      if(state.flags.charm && rng.rand()<0.10){
+        apply = false;
+        write('✨ Ta breloque scintille et dissipe le mal.','info');
+      }
+      if(apply){
+        if(e.dotType==='poison') state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)});
+        if(e.dotType==='bleed')  state.status.push({type:'bleed',  name:'Saignement', dur:rng.between(2,4)});
+        write(`⚠️ ${e.name} inflige ${e.dotType==='poison'?'un poison':'un saignement'} !`,"warn");
+      }
     }
   }else write(`${e.name} rate son attaque.`, "info");
   tickStatus();
@@ -281,7 +298,7 @@ function randomEncounter(){
   else if(z==='colline') combat(pick([mobs.harpy(), mobs.bandit()]));
   else if(z==='ruines') combat(pick([mobs.bandit(), mobs.harpy()]));
   else if(z==='grotte') combat(pick([{name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison'}]));
-  else combat(mobs.bandit());
+  else combat(mobs.bandit()));
 }
 
 // ---------- Événements & PNJ ----------
@@ -481,6 +498,43 @@ function eventCaravan(){
   addChoice("Les voler", ()=>{ changeGold(5); rep(-5); setCooldown('caravan',5); combat(mobs.bandit()); });
 }
 
+// === Ermite (zone : colline) ===
+function eventHermit(){
+  if(!available('hermit')){ 
+    write("🧙 L’ermite médite ailleurs pour aujourd’hui."); 
+    return continueBtn(); 
+  }
+  write('🧙 Un ermite t’observe en silence.');
+  clearChoices();
+  addChoice('Accepter sa décoction', ()=>{
+    if(rng.rand()<0.6){ 
+      heal(rng.between(5,10)); 
+      gainXP(3); 
+    } else { 
+      damage(rng.between(2,5),'Nausée'); 
+    }
+    setCooldown('hermit', 2);
+    continueBtn();
+  }, true);
+  addChoice("Acheter une breloque (5 or)", ()=>{
+    if(hasItem("Breloque d'ermite")){
+      write("Tu possèdes déjà une breloque.", "info");
+    } else if(state.gold>=5){
+      changeGold(-5);
+      addItem("Breloque d'ermite","10% d’annuler un mal (poison/saignement)");
+      state.flags.charm = 1;
+    } else {
+      write("Pas assez d’or.", "warn");
+    }
+    setCooldown('hermit', 2);
+    continueBtn();
+  });
+  addChoice('Refuser poliment', ()=>{
+    setCooldown('hermit', 1);
+    continueBtn();
+  });
+}
+
 // ---------- Boss & oracle ----------
 const mobs = {
   wolf: ()=>({name:'Loup affamé',hp:10,maxHp:10,ac:11,hitMod:2,tier:1}),
@@ -607,7 +661,7 @@ function explore(initial=false){
     );
   } else if(z==='colline'){
     dyn.push(
-      {label:'Rencontrer un ermite',   act:eventHermit,    w:1},
+      {label:'Rencontrer un ermite',   act:eventHermit,    w:1, key:'hermit'},
       {label:'Explorer des ruines',    act:eventRuins,     w:2, key:'ruins'},
       {label:'Affronter une harpie',   act:()=>combat(mobs.harpy()), w:3},
       {label:'Croiser un forgeron',    act:eventSmith,     w:1, key:'smith'},
@@ -729,10 +783,13 @@ function gameOver(){
   addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
 }
 
-// Optionnels si présents dans le DOM
+// Boutons (si présents dans le DOM)
 const btnSave=document.getElementById('btn-save'); if(btnSave) btnSave.onclick=save;
 const btnLoad=document.getElementById('btn-load'); if(btnLoad) btnLoad.onclick=()=>load();
 const btnReset=document.getElementById('btn-reset'); if(btnReset) btnReset.onclick=()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
 
+// PWA
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js') ); }
+
+// Boot DOM-safe
 (function boot(){ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ()=>setup(true), { once:true }); else setup(true); })();
