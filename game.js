@@ -1,4 +1,4 @@
-// === Aventurier de Mirval — game.js (v10) ===
+// === Aventurier de Mirval — game.js (v10 complet, sans sauvegarde/chargement) ===
 console.log("game.js v10 chargé");
 
 // ---------- Wake Lock (mobile) ----------
@@ -80,8 +80,9 @@ function addChoice(label, handler, primary=false){
   normalizeChoices();
 }
 function continueBtn(next=()=>explore()){
-  // supprime tous les "Continuer" existants
-  [...ui.choices.querySelectorAll('button')].filter(b=>b.textContent.trim()==='Continuer').forEach(b=>b.remove());
+  // Supprime tous les “Continuer” existants puis ajoute un seul
+  [...ui.choices.querySelectorAll('button')]
+    .filter(b=>b.textContent.trim()==='Continuer').forEach(b=>b.remove());
   addChoice("Continuer", next, true);
 }
 
@@ -240,7 +241,7 @@ function afterCombat(){
   if(e.name.includes("Bandit"))      tryDropFragment("butin des bandits", 0.07);
   if(e.name.includes("Harpie"))      tryDropFragment("plume runique", 0.05);
   if(e.name.includes("Goule"))       tryDropFragment("relique miasmatique", 0.10);
-  if(e.name.includes("Ours"))        tryDropFragment("coeur ancien", 0.08);
+  if(e.name.includes("Ours"))        tryDropFragment("cœur ancien", 0.08);
 
   // Loot objets (cap 2 / jour)
   const r=rng.rand();
@@ -298,7 +299,7 @@ function randomEncounter(){
   else if(z==='colline') combat(pick([mobs.harpy(), mobs.bandit()]));
   else if(z==='ruines') combat(pick([mobs.bandit(), mobs.harpy()]));
   else if(z==='grotte') combat(pick([{name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison'}]));
-  else combat(mobs.bandit()));
+  else combat(mobs.bandit());
 }
 
 // ---------- Événements & PNJ ----------
@@ -327,13 +328,13 @@ function eventSmith(){
   if(!available('smith')){ write('⚒️ Le forgeron a plié bagage pour la journée.'); return continueBtn(); }
   write('⚒️ Un forgeron itinérant inspecte tes armes.');
   clearChoices();
-  addChoice('Demander une amélioration (5 or)', ()=>{
+  addChoice('Améliorer l’épée (5 or)', ()=>{
     if(state.gold>=5 && !hasItem('Épée affûtée')){ changeGold(-5); addItem('Épée affûtée','+1 attaque'); }
     else write("Pas assez d'or ou déjà amélioré.",'warn');
     setCooldown('smith', 2);
     continueBtn();
   }, true);
-  addChoice('Commander un bouclier (6 or)', ()=>{
+  addChoice('Bouclier en fer (6 or)', ()=>{
     if(state.gold>=6 && !hasItem('Bouclier en fer')){ changeGold(-6); addItem('Bouclier en fer','+2 armure'); }
     else write("Pas assez d'or ou déjà équipé.",'warn');
     setCooldown('smith', 2);
@@ -733,10 +734,6 @@ function chooseClass(){
   addChoice('🔮 Mystique',()=> pick('Mystique','WIS',3,{ name:'Onde arcanique', cooldown:3, cd:0, use:(e)=>{ const dmg=rng.between(3,8); e.hp-=dmg; e.dotChance=Math.min(0.6,(e.dotChance||0)+0.15); write(`🔮 Onde arcanique : -${dmg} PV`,'good'); } }));
 }
 
-// ---------- Sauvegarde (désactivée pour GitHub Pages) ----------
-function save(){ write("Sauvegarde désactivée (build GitHub).","warn"); }
-function load(){ write("Chargement désactivé (build GitHub).","warn"); return null; }
-
 // ---------- Boot ----------
 let state;
 function initialState(){
@@ -750,7 +747,7 @@ function initialState(){
     locationKey:"clairiere",
     inventory:[{name:"Vieille épée", desc:"+1 attaque"},{name:"Petite armure", desc:"+1 armure"}],
     potions:1, status:[],
-    flags:{ metHerbalist:false,metSmith:false,peasantSaved:false, fragments:0,bossUnlocked:false,torch:false,oracleSeen:false, ruinsUnlocked:true,grottoUnlocked:false,rumors:0,charm:0, runeDone:false, campBeacon:false, childSolved:false },
+    flags:{ metHerbalist:false,metSmith:false,peasantSaved:false, fragments:0,bossUnlocked:false,torch:false,oracleSeen:false, ruinsUnlocked:true,grottoUnlocked:false,rumors:0,charm:0, runeDone:false },
     quests:{ main:{title:'Le Chef Bandit',state:'En cours'}, side:[], artifacts:{title:'Fragments d’artefact (0/3)',state:'En cours'} },
     achievements:{}, lastLabels:[],
     inCombat:false, enemy:null,
@@ -783,9 +780,7 @@ function gameOver(){
   addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
 }
 
-// Boutons (si présents dans le DOM)
-const btnSave=document.getElementById('btn-save'); if(btnSave) btnSave.onclick=save;
-const btnLoad=document.getElementById('btn-load'); if(btnLoad) btnLoad.onclick=()=>load();
+// Bouton reset (si présent)
 const btnReset=document.getElementById('btn-reset'); if(btnReset) btnReset.onclick=()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
 
 // PWA
