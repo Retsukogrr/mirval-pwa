@@ -1,39 +1,64 @@
-const CACHE_VERSION = 'mirval-v9';
-const STATIC_ASSETS = [
-  './','./index.html','./play.html','./manifest.webmanifest','./sw.js','./offline.html',
-  './icons/icon-192.png','./icons/icon-512.png'
+// sw.js — Mirval PWA (force update)
+const CACHE_VERSION = 'mirval-v11'; // ⬅︎ change à chaque release
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const PRECACHE = [
+  '/',            // si ta page d’accueil redirige vers play.html
+  '/mirval-pwa/', // garde si ton site est dans /mirval-pwa/
+  '/mirval-pwa/play.html',
+  '/mirval-pwa/game.js?v=11',          // ⬅︎ versionné
+  '/mirval-pwa/manifest.webmanifest',
+  '/mirval-pwa/offline.html',
+  '/mirval-pwa/icons/icon-192.png',
+  '/mirval-pwa/icons/icon-512.png',
 ];
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(STATIC_ASSETS)));
-  self.skipWaiting();
+
+// Installe et pré-cache
+self.addEventListener('install', (event) => {
+  self.skipWaiting(); // ⬅︎ prend la main de suite
+  event.waitUntil(caches.open(STATIC_CACHE).then(cache => cache.addAll(PRECACHE)));
 });
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => k!==CACHE_VERSION ? caches.delete(k):null))));
-  self.clients.claim();
+
+// Active et nettoie les vieux caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => (k !== STATIC_CACHE ? caches.delete(k) : null)));
+    await self.clients.claim(); // ⬅︎ contrôle immédiat des pages
+  })());
 });
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
+
+// Stratégie: Network-First pour HTML (toujours vérifier s’il y a une maj)
+// Cache-First pour le reste
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  const isHTML = req.headers.get('accept')?.includes('text/html');
+
   if (isHTML) {
-    e.respondWith((async () => {
-      try { // network-first
-        const fresh = await fetch(req);
-        const copy = fresh.clone();
-        const cache = await caches.open(CACHE_VERSION);
-        cache.put(req, copy);
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req, { cache: 'no-store' });
+        const cache = await caches.open(STATIC_CACHE);
+        cache.put(req, fresh.clone());
         return fresh;
       } catch (err) {
-        const cached = await caches.match('./play.html');
-        return cached || caches.match('./offline.html');
+        const cached = await caches.match(req);
+        return cached || caches.match('/mirval-pwa/offline.html');
       }
     })());
     return;
   }
-  e.respondWith(
-    caches.match(req).then(cached => cached || fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE_VERSION).then(c => c.put(req, copy));
-      return res;
-    }).catch(() => cached))
-  );
+
+  // Cache-First pour JS/CSS/images
+  event.respondWith((async () => {
+    const cached = await caches.match(req);
+    if (cached) return cached;
+    try {
+      const fresh = await fetch(req);
+      const cache = await caches.open(STATIC_CACHE);
+      cache.put(req, fresh.clone());
+      return fresh;
+    } catch (err) {
+      return cached; // dernier recours
+    }
+  })());
 });
