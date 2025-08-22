@@ -730,9 +730,7 @@ function initialState(){
   };
 }
 
-// === Démarrage / reprise ===
-let state = (load()||initialState());
-
+/* === SETUP / DÉMARRAGE === */
 function setup(isNew=false){
   setStats();
   ui.loc.textContent = state.location;
@@ -741,13 +739,13 @@ function setup(isNew=false){
 
   if(isNew || ui.log.childElementCount===0){
     write("v9 — Page: play.html — Tu es à la lisière de la forêt de Mirval. Les légendes parlent d'un Chef Bandit et d'antiques fragments.", "sys");
-    chooseClass();
+    chooseClass();   // 👈 Affiche directement le choix de classe
     return;
   }
-  // Si on a un log existant (partie chargée), on reprend l’exploration
   explore(true);
 }
 
+/* Nouvelle aventure après choix de classe */
 function startAdventure(){
   ui.log.innerHTML="";
   write("L'aventure commence !", "info");
@@ -755,7 +753,7 @@ function startAdventure(){
   explore(true);
 }
 
-// Quand le héros meurt
+/* Écran de mort */
 function gameOver(){
   state.inCombat=false;
   write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
@@ -764,7 +762,7 @@ function gameOver(){
   addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
 }
 
-// Petite qualité de vie : décale le cooldown de compétence à chaque exploration
+/* Réduction du cooldown de compétence à chaque exploration */
 const _explore = explore;
 explore = function(...args){
   if(state.skill && typeof state.skill.cd==='number'){
@@ -773,10 +771,10 @@ explore = function(...args){
   _explore(...args);
 };
 
-// === PWA : enregistrement du service worker ===
+/* PWA : enregistrement du service worker */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js') );
 }
 
-// === Lancer le jeu ===
+/* === Lancer le jeu === */
 setup(true);
