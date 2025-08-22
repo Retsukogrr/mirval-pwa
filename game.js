@@ -132,15 +132,13 @@ function hasItem(name){ return state.inventory.some(i=>i.name===name); }
 function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
 function repText(n){return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'}
 
-// Sauvegarde
-function save(){ localStorage.setItem('mirval.save', JSON.stringify(state)); write("Sauvegarde effectuée.","sys"); }
-function load(){
-  try{ const raw=localStorage.getItem('mirval.save'); if(!raw) return null; const obj=JSON.parse(raw); return obj&&typeof obj==='object'?obj:null; }
-  catch(e){ return null; }
-}
+// Sauvegarde désactivée (no-op)
+function save(){ write("Sauvegarde désactivée sur cette build.", "warn"); }
+function load(){ write("Chargement désactivé sur cette build.", "warn"); return null; }
 function reset(){ state = initialState(); ui.log.innerHTML=""; setup(true); write("Nouvelle aventure !","sys"); }
+
 document.getElementById('btn-save').onclick=save;
-document.getElementById('btn-load').onclick=()=>{ const s=load(); if(s){ state=s; ui.log.innerHTML=""; setup(); write("Sauvegarde chargée.","sys"); } else write("Aucune sauvegarde.","warn"); };
+document.getElementById('btn-load').onclick=()=>{ load(); };
 document.getElementById('btn-reset').onclick=reset;
 // === Statuts récurrents (poison, saignement, ralentissement) ===
 function tickStatus(){
