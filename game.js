@@ -51,7 +51,6 @@ function write(text, cls=""){
   ui.log.scrollTop=ui.log.scrollHeight;
 }
 function clearChoices(){ ui.choices.innerHTML=""; }
-
 function disableAllChoices(){ ui.choices.querySelectorAll('button').forEach(b=>b.disabled=true); }
 function normalizeChoices(){
   const seen=new Set();
@@ -64,12 +63,10 @@ function normalizeChoices(){
     if(seen.has(key)) b.remove(); else seen.add(key);
   });
 }
-let _actionSerial=0;
 function addChoice(label, handler, primary=false){
   const btn=document.createElement('button');
   if(primary) btn.classList.add('btn-primary');
   btn.textContent = label;
-  const id=++_actionSerial;
   btn.addEventListener('click', ()=>{
     if(btn.disabled) return;
     disableAllChoices();             // anti double-tap
@@ -605,6 +602,14 @@ function gotoZone(key){
 }
 
 function explore(initial=false){
+  // Garde : pas de gameplay sans classe
+  if (state.cls === '—') {
+    ui.log.innerHTML = "";
+    write("v10 — Choisis d’abord une classe.", "sys");
+    chooseClass();
+    return;
+  }
+
   setStats();
   ui.loc.textContent = state.location;
   ui.day.textContent = `Jour ${state.day} — ${state.time}`;
@@ -758,21 +763,40 @@ function initialState(){
 }
 state = initialState();
 
-function setup(isNew=false){
-  setStats();
+function setup(isNew=true){
+  // Assainit l’état et force l’écran classe si besoin
+  const classesValides = ['Guerrier','Voleur','Paladin','Rôdeur','Mystique'];
+  if (!classesValides.includes(state.cls)) state.cls = '—';
+
   ui.loc.textContent = state.location;
   ui.day.textContent = `Jour ${state.day} — ${state.time}`;
+  ui.log.innerHTML = "";    // évite un ancien log
   clearChoices();
-  const classesValides = ['Guerrier','Voleur','Paladin','Rôdeur','Mystique'];
-  const needsClass = !state.cls || state.cls === '—' || !classesValides.includes(state.cls);
-  if (isNew || ui.log.childElementCount===0 || needsClass){
-    write("v10 — Page: play.html — Démarrage.", "sys");
+  setStats();
+
+  if (state.cls === '—') {
+    write("v10 — Démarrage (choisis une classe)", "sys");
     chooseClass();
+    // filet de sécu
+    setTimeout(()=>{
+      if (!ui.choices.querySelector('button')) {
+        console.warn('Relance du menu de classe (filet de sécu)');
+        chooseClass();
+      }
+    }, 150);
     return;
   }
   explore(true);
 }
-function startAdventure(){ ui.log.innerHTML=""; write("L'aventure commence !","info"); setStats(); explore(true); }
+
+function startAdventure(){
+  if (state.cls === '—') { chooseClass(); return; }
+  ui.log.innerHTML="";
+  write("L'aventure commence !","info");
+  setStats();
+  explore(true);
+}
+
 function gameOver(){
   state.inCombat=false;
   write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
@@ -781,7 +805,8 @@ function gameOver(){
 }
 
 // Bouton reset (si présent)
-const btnReset=document.getElementById('btn-reset'); if(btnReset) btnReset.onclick=()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
+const btnReset=document.getElementById('btn-reset');
+if(btnReset) btnReset.onclick=()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
 
 // PWA
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js') ); }
