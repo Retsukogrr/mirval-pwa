@@ -1,7 +1,7 @@
-// === Aventurier de Mirval — game.js (build v10 clean) ===
+// === Aventurier de Mirval — game.js (build v10) ===
 console.log("game.js v10 chargé");
 
-// Garder l’écran éveillé (utile sur mobile)
+// Garder l’écran éveillé (mobile)
 let wakeLock;
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
@@ -16,11 +16,11 @@ const rng = (() => {
   return {rand, between, seed};
 })();
 
-// Affiche la graine si l’élément existe
+// Afficher la seed si l’élément est présent
 const seedEl = document.getElementById('seedInfo');
-if (seedEl) { seedEl.textContent = `seed ${rng.seed}`; }
+if(seedEl){ seedEl.textContent = `seed ${rng.seed}`; }
 
-// Références UI (tous ces IDs doivent exister dans play.html)
+// Références UI
 const ui = {
   log: document.getElementById('log'),
   choices: document.getElementById('choices'),
@@ -45,22 +45,10 @@ const ui = {
   quests: document.getElementById('quests'),
 };
 
-// Utils UI
-function write(text, cls=""){
-  const p=document.createElement('p');
-  if(cls) p.classList.add(cls);
-  p.innerHTML=text;
-  ui.log.appendChild(p);
-  ui.log.scrollTop=ui.log.scrollHeight;
-}
+// Helpers UI
+function write(text, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=text; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
 function clearChoices(){ ui.choices.innerHTML=""; }
-function addChoice(label, handler, primary=false){
-  const btn=document.createElement('button');
-  if(primary) btn.classList.add('btn-primary');
-  btn.textContent = label;
-  btn.onclick = handler;
-  ui.choices.appendChild(btn);
-}
+function addChoice(label, handler, primary=false){ const btn=document.createElement('button'); if(primary) btn.classList.add('btn-primary'); btn.textContent = label; btn.onclick = handler; ui.choices.appendChild(btn); }
 
 // Stats & affichage
 function setStats(){
@@ -113,12 +101,9 @@ function hasItem(name){ return state.inventory.some(i=>i.name===name); }
 function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
 function repText(n){return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'}
 
-// (Plus de sauvegarde/chargement — retirés)
-// Bouton Recommencer (binding safe)
+// Bouton Recommencer
 const resetBtn = document.getElementById('btn-reset');
-if(resetBtn){
-  resetBtn.onclick = ()=>{ state = initialState(); ui.log.innerHTML=""; setup(true); write("Nouvelle aventure !","sys"); };
-}
+if(resetBtn){ resetBtn.onclick = ()=>{ state = initialState(); ui.log.innerHTML=""; setup(true); write("Nouvelle aventure !","sys"); }; }
 
 // Statuts récurrents
 function tickStatus(){
@@ -157,7 +142,6 @@ function combatTurn(){
   const e = state.enemy;
 
   addChoice(`Attaquer`, ()=>{ aimMenu(); }, true);
-
   addChoice(`Parer`, ()=>{
     const bonus = state.cls==='Rôdeur'?2:1;
     const m = d20(e.hitMod).total;
@@ -168,7 +152,6 @@ function combatTurn(){
     } else write("Tu pares complètement !","good");
     combatTurn();
   });
-
   addChoice(`Compétence`, ()=>{
     if(state.skill.cd){ write("Compétence en recharge.","warn"); return combatTurn(); }
     state.skill.use(e);
@@ -176,13 +159,11 @@ function combatTurn(){
     if(e.hp>0) enemyAttack();
     combatTurn();
   });
-
   addChoice(`Potion (${state.potions})`, ()=>{
     if(state.potions<=0){ write("Plus de potions.","warn"); return combatTurn(); }
     state.potions--; heal(rng.between(8,12));
     enemyAttack(); combatTurn();
   });
-
   addChoice(`Fuir`, ()=>{
     const r=d20(state.attrs.AGI>=3?2:0).total;
     if(r>=14){ write("Tu fuis le combat.","sys"); state.inCombat=false; state.enemy=null; explore(); }
@@ -574,7 +555,7 @@ function chooseClass(){
   }));
 }
 
-// État initial (aligné avec play.html : 20 PV, 10 or)
+// État initial
 function initialState(){
   return {
     name:"Eldarion", cls:"—",
@@ -605,10 +586,10 @@ function initialState(){
   };
 }
 
-// Initialisation de l’état
+// État courant
 let state = initialState();
 
-/* SETUP / DÉMARRAGE — force le menu de classe si aucune classe choisie */
+/* SETUP : force le menu de classe au démarrage */
 function setup(isNew=false){
   setStats();
   ui.loc.textContent = state.location;
@@ -619,14 +600,14 @@ function setup(isNew=false){
   const needsClass = !state.cls || state.cls === '—' || !classesValides.includes(state.cls);
 
   if (isNew || ui.log.childElementCount===0 || needsClass){
-    write("v10 — Page: play.html — Démarrage.", "sys");
+    write("v10 — Démarrage.", "sys");
     chooseClass();
     return;
   }
   explore(true);
 }
 
-/* Nouvelle aventure après choix de classe */
+/* Nouvelle aventure */
 function startAdventure(){
   ui.log.innerHTML="";
   write("L'aventure commence !","info");
@@ -634,7 +615,7 @@ function startAdventure(){
   explore(true);
 }
 
-/* Écran de mort */
+/* Mort */
 function gameOver(){
   state.inCombat=false;
   write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
@@ -642,7 +623,7 @@ function gameOver(){
   addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
 }
 
-/* QoL : cooldown de compétence -1 à chaque exploration */
+/* Cooldown -1 à chaque exploration */
 const _explore = explore;
 explore = function(...args){
   if(state.skill && typeof state.skill.cd==='number'){
@@ -651,36 +632,18 @@ explore = function(...args){
   _explore(...args);
 };
 
-/* PWA : enregistrement du service worker (si présent à la racine) */
+/* Service worker (facultatif si sw.js présent) */
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js') );
 }
 
-/* Boot infaillible : déclenche setup(true) et loggue toute erreur */
+/* Boot fiable */
 window.addEventListener('DOMContentLoaded', () => {
-  try {
-    console.log('DOM prêt — boot v10');
-    if (typeof setup === 'function') {
-      setup(true);                  // Affiche le menu de classe
-    } else {
-      console.error('setup() non définie');
-      const log = document.getElementById('log');
-      if (log) {
-        const p = document.createElement('p');
-        p.className = 'bad';
-        p.textContent = "Erreur: setup() non définie — game.js ne s'est pas chargé correctement.";
-        log.appendChild(p);
-      }
-    }
-  } catch (e) {
-    console.error('Erreur au démarrage:', e);
-    const log = document.getElementById('log');
-    if (log) {
-      const p = document.createElement('p');
-      p.className = 'bad';
-      p.textContent = "Erreur JavaScript: " + e.message;
-      log.appendChild(p);
-    }
-    alert('Erreur JavaScript: ' + e.message);
+  try{
+    if (typeof setup === 'function') setup(true);
+    else { const p=document.createElement('p'); p.className='bad'; p.textContent="Erreur: setup() non définie."; ui.log.appendChild(p); }
+  }catch(e){
+    const p=document.createElement('p'); p.className='bad'; p.textContent="Erreur JavaScript: "+e.message; ui.log.appendChild(p);
+    alert("Erreur JavaScript: "+e.message);
   }
-}, { once: true });
+}, { once:true });
