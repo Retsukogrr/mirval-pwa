@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Aventurier de Mirval — Director's Cut (v10)</title>
 <meta name="theme-color" content="#0e0f13" />
+
+<!-- PWA -->
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
 <style>
   :root{
     --bg:#0e0f13; --panel:#171923; --accent:#6ee7b7; --muted:#a6b0c0; --danger:#ef4444; --warn:#f59e0b; --ok:#22c55e; --info:#60a5fa;
@@ -38,7 +41,7 @@
   <div class="wrap">
     <header>
       <h1>🗡️ Aventurier de Mirval — Director's Cut (v10)</h1>
-      <span class="badge">JDR solo — progression, chapitres, hub & combats évolués</span>
+      <span class="badge">JDR solo — quêtes, réputation, classes & combats</span>
     </header>
 
     <div class="grid">
@@ -53,10 +56,10 @@
           <span class="chip">Réputation <b id="rep-label">Neutre</b> (<span id="rep">0</span>)</span>
         </div>
         <div class="stat">
-          <b>Vie</b><span><span id="hp">20</span>/<span id="hpmax">20</span></span>
+          <b>Vie</b><span><span id="hp">22</span>/<span id="hpmax">22</span></span>
           <div class="bar" style="grid-column:1 / -1;"><i id="hpbar" style="width:100%"></i></div>
         </div>
-        <div class="stat"><b>Or</b><span id="gold">10</span></div>
+        <div class="stat"><b>Or</b><span id="gold">12</span></div>
         <div class="stat"><b>Niveau</b><span id="lvl">1</span></div>
         <div class="stat"><b>Expérience</b><span id="xp">0</span></div>
         <div class="stat"><b>États</b><span id="status">—</span></div>
@@ -69,12 +72,14 @@
         <div class="divider"></div>
         <div class="title"><h2>Actions</h2></div>
         <div class="chips">
+          <button id="btn-save" class="btn-ghost">💾 Sauvegarder</button>
+          <button id="btn-load" class="btn-ghost">📂 Charger</button>
           <button id="btn-reset" class="btn-danger">♻️ Recommencer</button>
         </div>
       </aside>
 
       <main class="panel">
-        <div class="title"><h2 id="location">Village de Mirval</h2><span class="meta" id="day">Jour 1 — Aube</span></div>
+        <div class="title"><h2 id="location">Lisière de la forêt de Mirval</h2><span class="meta" id="day">Jour 1 — Aube</span></div>
         <div class="log" id="log"></div>
         <div class="divider"></div>
         <div class="title"><h2>Que fais-tu ?</h2></div>
@@ -86,6 +91,8 @@
       </main>
     </div>
   </div>
-  <script src="game.js"></script>
+
+  <!-- Script du jeu (v10) -->
+  <script src="./game.js"></script>
 </body>
 </html>
