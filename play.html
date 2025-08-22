@@ -14,46 +14,47 @@
     --bg:#0e0f13; --panel:#171923; --accent:#6ee7b7; --muted:#a6b0c0; --danger:#ef4444; --warn:#f59e0b; --ok:#22c55e; --info:#60a5fa;
     --text:#e5e7eb; --btn:#1f2937; --btn-hover:#273244;
   }
-  *{box-sizing:border-box} 
+  *{box-sizing:border-box}
   body{margin:0;background:#0e0f13;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Noto Sans",Arial}
   .wrap{max-width:1000px;margin:0 auto;padding:16px}
   header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
-  h1{margin:0;font-size:clamp(1.1rem,2.6vw,1.8rem)} 
+  h1{margin:0;font-size:clamp(1.1rem,2.6vw,1.8rem)}
   .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0b1220;border:1px solid #1f2a3a;color:var(--muted)}
-  .grid{display:grid;grid-template-columns:320px 1fr;gap:14px} 
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
   @media (max-width:860px){.grid{grid-template-columns:1fr}}
   .panel{background:linear-gradient(180deg,#151826,#0f1320);border:1px solid #273244;border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
-  .title{display:flex;align-items:center;gap:10px} 
-  .title h2{margin:0;font-size:1.05rem} 
+  .title{display:flex;align-items:center;gap:10px}
+  .title h2{margin:0;font-size:1.05rem}
   .meta{color:var(--muted);font-size:12px}
   .stat{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:6px 0;padding:8px 10px;border-radius:10px;background:linear-gradient(180deg,#111422,#0c101b);border:1px solid #222a3a}
-  .attrs,.chips{display:flex;flex-wrap:wrap;gap:6px} 
+  .attrs,.chips{display:flex;flex-wrap:wrap;gap:6px}
   .chip{background:#0f1422;border:1px solid #22304a;color:#b9c2d0;border-radius:999px;padding:4px 8px;font-size:12px}
   .inv{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .item-common { color:#d1d5db }
   .item-rare { color:#3b82f6 }
   .item-epic { color:#8b5cf6 }
   .item-legendary { color:#f59e0b }
-  .bar{height:10px;background:#0b0e15;border-radius:999px;overflow:hidden;border:1px solid #2a3448} 
+  .inv .stat b .emoji{margin-right:6px}
+  .bar{height:10px;background:#0b0e15;border-radius:999px;overflow:hidden;border:1px solid #2a3448}
   .bar>i{display:block;height:100%;background:linear-gradient(90deg,#60a5fa,#34d399);width:50%;transition:width .4s ease}
   .log{height:260px;overflow:auto;background:linear-gradient(180deg,#0d111b,#0a0f18);border:1px solid #213049;border-radius:12px;padding:10px;font-size:14px}
-  .log p{margin:0 0 8px} 
-  .log .sys{color:#9aa3b2} 
-  .log .good{color:var(--ok)} 
-  .log .bad{color:var(--danger)} 
-  .log .warn{color:var(--warn)} 
+  .log p{margin:0 0 8px}
+  .log .sys{color:#9aa3b2}
+  .log .good{color:var(--ok)}
+  .log .bad{color:var(--danger)}
+  .log .warn{color:var(--warn)}
   .log .info{color:var(--info)}
   .divider{height:1px;background:#243044;margin:10px 0}
   .choices{display:grid;gap:10px;margin-top:10px}
   button{appearance:none;border:0;background:var(--btn);color:#e7ecf5;padding:16px 18px;border-radius:12px;cursor:pointer;border:1px solid #2c3a54;transition:transform .05s ease, background .12s ease, border-color .12s ease;text-align:left;font-size:18px;line-height:1.3}
-  button:hover{background:var(--btn-hover);border-color:#3a4a68} 
-  button:active{transform:translateY(1px)} 
-  .btn-primary{background:#1c2a3d;border-color:#3a4a68} 
-  .btn-danger{background:#3a1f22;border-color:#6b2d33} 
+  button:hover{background:var(--btn-hover);border-color:#3a4a68}
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:#1c2a3d;border-color:#3a4a68}
+  .btn-danger{background:#3a1f22;border-color:#6b2d33}
   .btn-ghost{background:transparent;border-color:#334155}
   .footer{margin-top:10px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:#9aa3b2;font-size:12px}
   .illustration{display:flex;justify-content:center;margin:10px 0}
-  .illustration img{max-width:100%;max-height:200px;border-radius:12px;border:1px solid #273244;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+  .illustration .svgwrap{width:100%;max-width:640px;max-height:220px;aspect-ratio:32/11;border-radius:12px;border:1px solid #273244;box-shadow:0 4px 12px rgba(0,0,0,.4);overflow:hidden}
 </style>
 </head>
 <body>
@@ -97,7 +98,7 @@
 
       <main class="panel">
         <div class="title"><h2 id="location">Lisière de la forêt de Mirval</h2><span class="meta" id="day">Jour 1 — Aube</span></div>
-        <div class="illustration"><img id="scene-img" src="./assets/default.png" alt="scène"></div>
+        <div class="illustration"><div id="scene-svg" class="svgwrap"></div></div>
         <div class="log" id="log"></div>
         <div class="divider"></div>
         <div class="title"><h2>Que fais-tu ?</h2></div>
@@ -109,7 +110,6 @@
       </main>
     </div>
   </div>
-<!-- Fin de play.html -->
 <script src="game.js"></script>
 </body>
 </html>
