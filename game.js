@@ -15,7 +15,10 @@ const rng = (() => {
   function between(min,max){ return Math.floor(rand()*(max-min+1))+min; }
   return {rand, between, seed};
 })();
-document.getElementById('seedInfo').textContent = `seed ${rng.seed}`;
+
+// sécurisation seed (DOM)
+const seedEl = document.getElementById('seedInfo');
+if (seedEl) { seedEl.textContent = `seed ${rng.seed}`; }
 
 // Références UI
 const ui = {
@@ -61,7 +64,7 @@ function setStats(){
   // Quêtes
   ui.quests.innerHTML='';
   const mq=document.createElement('div'); mq.className='stat'; mq.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state}</span>`; ui.quests.appendChild(mq);
-  const aq=document.createElement('div'); aq.className='stat'; aq.innerHTML=`<b>${state.quests.artifacts.title.replace(/\\d\\/3/,state.flags.fragments+'/3')}</b><span>${state.quests.artifacts.state}</span>`; ui.quests.appendChild(aq);
+  const aq=document.createElement('div'); aq.className='stat'; aq.innerHTML=`<b>Fragments d’artefact (${state.flags.fragments}/3)</b><span>${state.quests.artifacts.state}</span>`; ui.quests.appendChild(aq);
   state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
 }
 
@@ -334,7 +337,7 @@ function initialState(){
   };
 }
 
-// ⚠️ Initialisation de l’état (c’était la ligne manquante)
+// Initialisation de l’état
 let state = initialState();
 
 /* SETUP / DÉMARRAGE — robuste : force le menu de classe si aucune classe choisie */
@@ -368,14 +371,34 @@ function gameOver(){
 const _explore = explore;
 explore = function(...args){ if(state.skill && typeof state.skill.cd==='number'){ state.skill.cd = Math.max(0, state.skill.cd-1); } _explore(...args); };
 
-/* PWA : enregistrement du service worker (assure-toi d’avoir sw.js à la racine) */
+/* PWA : enregistrement du service worker (si présent à la racine) */
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js') ); }
 
-/* Boot DOM-safe : lance setup(true) quand le DOM est prêt */
-(function boot(){
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ()=>setup(true), { once:true });
-  } else {
-    setup(true);
+/* Boot infaillible : déclenche setup(true) et loggue toute erreur */
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    console.log('DOM prêt — boot v10');
+    if (typeof setup === 'function') {
+      setup(true);                  // Affiche le menu de classe
+    } else {
+      console.error('setup() non définie');
+      const log = document.getElementById('log');
+      if (log) {
+        const p = document.createElement('p');
+        p.className = 'bad';
+        p.textContent = "Erreur: setup() non définie — game.js ne s'est pas chargé correctement.";
+        log.appendChild(p);
+      }
+    }
+  } catch (e) {
+    console.error('Erreur au démarrage:', e);
+    const log = document.getElementById('log');
+    if (log) {
+      const p = document.createElement('p');
+      p.className = 'bad';
+      p.textContent = "Erreur JavaScript: " + e.message;
+      log.appendChild(p);
+    }
+    alert('Erreur JavaScript: ' + e.message);
   }
-})();
+}, { once: true });
