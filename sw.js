@@ -1,11 +1,11 @@
 // sw.js — Mirval PWA (force update)
-const CACHE_VERSION = 'mirval-v11'; // ⬅︎ change à chaque release
+const CACHE_VERSION = 'mirval-v10'; // ⬅︎ change à chaque release
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const PRECACHE = [
   '/',            // si ta page d’accueil redirige vers play.html
   '/mirval-pwa/', // garde si ton site est dans /mirval-pwa/
   '/mirval-pwa/play.html',
-  '/mirval-pwa/game.js?v=11',          // ⬅︎ versionné
+  '/mirval-pwa/game.js?v=10',          // ⬅︎ versionné
   '/mirval-pwa/manifest.webmanifest',
   '/mirval-pwa/offline.html',
   '/mirval-pwa/icons/icon-192.png',
