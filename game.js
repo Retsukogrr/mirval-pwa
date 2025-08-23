@@ -1,6 +1,6 @@
 // === Aventurier de Mirval — game.js (v10++) ===
-// RPG complet : FOR/AGI/ESP/VIT, compétences, shops (achat/vente), PNJ réactifs, fragments & boss.
-// Corrigé : le menu de CLASSE s’affiche toujours dès le démarrage.
+// FOR/AGI/ESP/VIT, compétences, loot/achat/vente, PNJ réactifs, fragments & boss,
+// visuels SVG intégrés, correctif du blocage après choix de classe.
 
 // ———————————————————————————————————————————————————————————
 // 0) QoL mobile : écran éveillé
@@ -51,18 +51,28 @@ const ui = {
 };
 function write(html, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=html; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
 
-// Boutons robustes (un seul “Continuer”, pas de double-clic)
-let _eventLocked=false;
-function clearChoices(){ ui.choices.innerHTML=""; _eventLocked=false; }
+// --- Helpers UI avec verrou robuste ---
+let _eventLocked = false;
+function clearChoices(){
+  if (ui && ui.choices) ui.choices.innerHTML = "";
+  _eventLocked = false; // on déverrouille à chaque nouvel écran
+}
 function addChoice(label, handler, primary=false){
-  if(_eventLocked) return;
-  const btn=document.createElement('button');
+  const btn = document.createElement('button');
   if(primary) btn.classList.add('btn-primary');
   btn.textContent = label;
-  btn.onclick = ()=>{ if(_eventLocked) return; _eventLocked=true; handler(); };
+  btn.onclick = () => {
+    if (_eventLocked) return;
+    _eventLocked = true;     // verrouille pendant l’action
+    try { handler(); }
+    finally { /* clearChoices() du prochain écran remettra _eventLocked=false */ }
+  };
   ui.choices.appendChild(btn);
 }
-function singleContinue(next=()=>explore()){ clearChoices(); addChoice("Continuer", ()=>next(), true); }
+function singleContinue(next=()=>explore()){
+  clearChoices();
+  addChoice("Continuer", ()=>next(), true);
+}
 
 // Masque/neutralise d’éventuels boutons Sauvegarder/Charger si présents
 ['btn-save','btn-load'].forEach(id=>{
@@ -454,7 +464,7 @@ function combatBoss(){
 }
 
 // ———————————————————————————————————————————————————————————
-// 11) Temps & exploration (rencontres réactives)
+// 11) Temps & exploration (rencontres réactives) — SÉCURISÉ
 // ———————————————————————————————————————————————————————————
 function setTime(){
   const slots=["Aube","Matin","Midi","Après-midi","Crépuscule","Nuit"];
@@ -471,67 +481,104 @@ function pickWeighted(items, k){
   return out;
 }
 function explore(initial=false){
-  refreshDerived(); setStats();
-  ui.loc.textContent = state.location; ui.day.textContent=`Jour ${state.day} — ${state.time}`;
-  clearChoices(); if(!initial) setTime(); tickStatus(); if(state.hp<=0) return;
-  addScene(zoneScene(state.locationKey));
-  if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
-  if(state.locationKey==='village'){ return villageHub(); }
+  try{
+    refreshDerived();
+    setStats();
+    ui.loc.textContent = state.location;
+    ui.day.textContent = `Jour ${state.day} — ${state.time}`;
 
-  const zone = state.locationKey;
-  const base = [
-    { label:"Fouiller", act:searchArea, w:2 },
-    { label:"Se reposer", act:rest, w:1 },
-    { label:"Utiliser un objet", act:useItemMenu, w:1 }
-  ];
-  let pool=[];
-  if(zone==='marais'){
-    pool.push({label:'Suivre des feux-follets', act:eventSanctuary, w:2});
-    pool.push({label:'Aider un captif', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); singleContinue(); } }, w:1});
-    pool.push({label:'Traquer une goule', act:()=>combat(mobTemplates.ghoul()), w:3});
-    pool.push({label:'Affronter un loup', act:()=>combat(mobTemplates.wolf()), w:2});
-    pool.push({label:'Biche prise au collet', act:eventRescueDoe, w:1});
-    pool.push({label:'Tomber sur un piège', act:()=>{ eventTrap(); singleContinue(); }, w:1});
-    if(!state.flags.frag1) pool.push({label:'Rumeur: Gardienne des Roseaux', act:()=>eventMiniBoss(1), w:1});
-  } else if(zone==='clairiere'){
-    pool.push({label:'Croiser une herboriste', act:eventHerbalist, w:2});
-    pool.push({label:'Écouter un barde', act:eventBard, w:1});
-    pool.push({label:'Chasser un sanglier', act:()=>combat(mobTemplates.boar()), w:2});
-    pool.push({label:'Autel moussu', act:eventSanctuary, w:1});
-    pool.push({label:'Rencontrer un forgeron', act:eventSmith, w:1});
-    pool.push({label:'Pèlerin perdu', act:eventEscortPilgrim, w:1});
-    pool.push({label:'Médaillon égaré', act:eventReturnLocket, w:1});
-  } else if(zone==='colline'){
-    pool.push({label:'Rencontrer un ermite', act:eventHermit, w:2});
-    pool.push({label:'Sentier vers les ruines', act:()=>gotoZone('ruines'), w:1});
-    pool.push({label:'Affronter une harpie', act:()=>combat(mobTemplates.harpy()), w:3});
-    if(!state.flags.frag2) pool.push({label:'Nid de la Matriarche', act:()=>eventMiniBoss(2), w:1});
-    pool.push({label:'Convoi marchand', act:eventMerchantAmbush, w:1});
-  } else if(zone==='ruines'){
-    pool.push({label:'Fouiller les décombres', act:eventRuins, w:3});
-    pool.push({label:'Écarter des pierres instables', act:()=>{ if(d20().total<10) damage(rng.between(1,4),'Éboulement'); else write("Tu avances prudemment."); singleContinue(); }, w:1});
-    pool.push({label:'Combattre des bandits', act:()=>combat(mobTemplates.bandit()), w:2});
-    if(!state.flags.frag3) pool.push({label:'Voix dans la pierre', act:()=>eventMiniBoss(3), w:1});
-  } else if(zone==='grotte'){
-    pool.push({label:'Affronter une goule ancienne', act:()=>combat({name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison', scene:'ghoul'}), w:3});
-    pool.push({label:'Échos inquiétants', act:()=>{ const r=d20().total; if(r<10) damage(3,'Stalactite'); else write('Rien ne se passe.'); singleContinue(); }, w:1});
+    clearChoices();            // ← remet l'état sain & déverrouille
+    if(!initial) setTime();
+    tickStatus();
+    if(state.hp<=0) return;
+
+    addScene(zoneScene(state.locationKey));
+
+    // événements “prioritaires”
+    if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
+    if(state.locationKey==='village'){ villageHub(); return; }
+
+    const zone = state.locationKey;
+
+    // base toujours présente
+    const base = [
+      { label:"Fouiller", act:searchArea, w:2 },
+      { label:"Se reposer", act:rest, w:1 },
+      { label:"Utiliser un objet", act:useItemMenu, w:1 }
+    ];
+
+    // pool dynamique par zone
+    let pool=[];
+    if(zone==='marais'){
+      pool.push({label:'Suivre des feux-follets', act:eventSanctuary, w:2});
+      pool.push({label:'Aider un captif', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); singleContinue(); } }, w:1});
+      pool.push({label:'Traquer une goule', act:()=>combat(mobTemplates.ghoul()), w:3});
+      pool.push({label:'Affronter un loup', act:()=>combat(mobTemplates.wolf()), w:2});
+      pool.push({label:'Biche prise au collet', act:eventRescueDoe, w:1});
+      pool.push({label:'Tomber sur un piège', act:()=>{ eventTrap(); singleContinue(); }, w:1});
+      if(!state.flags.frag1) pool.push({label:'Rumeur: Gardienne des Roseaux', act:()=>eventMiniBoss(1), w:1});
+    } else if(zone==='clairiere'){
+      pool.push({label:'Croiser une herboriste', act:eventHerbalist, w:2});
+      pool.push({label:'Écouter un barde', act:eventBard, w:1});
+      pool.push({label:'Chasser un sanglier', act:()=>combat(mobTemplates.boar()), w:2});
+      pool.push({label:'Autel moussu', act:eventSanctuary, w:1});
+      pool.push({label:'Rencontrer un forgeron', act:eventSmith, w:1});
+      pool.push({label:'Pèlerin perdu', act:eventEscortPilgrim, w:1});
+      pool.push({label:'Médaillon égaré', act:eventReturnLocket, w:1});
+    } else if(zone==='colline'){
+      pool.push({label:'Rencontrer un ermite', act:eventHermit, w:2});
+      pool.push({label:'Sentier vers les ruines', act:()=>gotoZone('ruines'), w:1});
+      pool.push({label:'Affronter une harpie', act:()=>combat(mobTemplates.harpy()), w:3});
+      if(!state.flags.frag2) pool.push({label:'Nid de la Matriarche', act:()=>eventMiniBoss(2), w:1});
+      pool.push({label:'Convoi marchand', act:eventMerchantAmbush, w:1});
+    } else if(zone==='ruines'){
+      pool.push({label:'Fouiller les décombres', act:eventRuins, w:3});
+      pool.push({label:'Écarter des pierres instables', act:()=>{ if(d20().total<10) damage(rng.between(1,4),'Éboulement'); else write("Tu avances prudemment."); singleContinue(); }, w:1});
+      pool.push({label:'Combattre des bandits', act:()=>combat(mobTemplates.bandit()), w:2});
+      if(!state.flags.frag3) pool.push({label:'Voix dans la pierre', act:()=>eventMiniBoss(3), w:1});
+    } else if(zone==='grotte'){
+      pool.push({label:'Affronter une goule ancienne', act:()=>combat({name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison', scene:'ghoul'}), w:3});
+      pool.push({label:'Échos inquiétants', act:()=>{ const r=d20().total; if(r<10) damage(3,'Stalactite'); else write('Rien ne se passe.'); singleContinue(); }, w:1});
+    }
+
+    if(state.flags.bossUnlocked)
+      pool.push({label:"Traquer le Chef Bandit", act:()=>combatBoss(), w:1});
+
+    // navigation (village débloqué)
+    const nav = [
+      {label:'→ Village', act:()=>gotoZone('village'), w: state.flags.villageUnlocked?1:0},
+      {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
+      {label:'→ Clairière', act:()=>gotoZone('clairiere'), w:1},
+      {label:'→ Colline', act:()=>gotoZone('colline'), w:1},
+      {label:'→ Ruines', act:()=>gotoZone('ruines'), w:1},
+      {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer. Trouve une torche.','warn'), singleContinue()), w:1}
+    ].filter(x=>x.w>0);
+
+    // tirage non redondant
+    const dyn = pickWeighted(pool, 2 + (rng.rand()<0.5?1:0));
+    const navPick = pickWeighted(nav, 1);
+    const all = pickWeighted([...base, ...dyn, ...navPick], 4);
+
+    all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
+
+    // filet de sécurité : s'il n'y a pas de boutons
+    if (!ui.choices.children.length){
+      console.warn('[Mirval] Fallback explore: aucun choix rendu, on injecte un set minimal.');
+      addChoice("Fouiller", searchArea, true);
+      addChoice("Se reposer", rest);
+      addChoice("→ Clairière", ()=>gotoZone('clairiere'));
+      addChoice("→ Village", ()=>gotoZone('village'));
+    }
+  } catch(err){
+    console.error('[Mirval] explore() error:', err);
+    write("⚠️ Un imprévu survient, tu reprends tes esprits…","warn");
+    // fallback basique
+    clearChoices();
+    addChoice("Fouiller", searchArea, true);
+    addChoice("Se reposer", rest);
+    addChoice("→ Clairière", ()=>gotoZone('clairiere'));
+    addChoice("→ Village", ()=>gotoZone('village'));
   }
-
-  if(state.flags.bossUnlocked) pool.push({label:"Traquer le Chef Bandit", act:()=>combatBoss(), w:1});
-
-  const nav=[ 
-    {label:'→ Village', act:()=>gotoZone('village'), w: state.flags.villageUnlocked?1:0},
-    {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
-    {label:'→ Clairière', act:()=>gotoZone('clairiere'), w:1},
-    {label:'→ Colline', act:()=>gotoZone('colline'), w:1},
-    {label:'→ Ruines', act:()=>gotoZone('ruines'), w:1},
-    {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer. Trouve une torche.','warn'), singleContinue()), w:1}
-  ].filter(x=>x.w>0);
-
-  const dyn = pickWeighted(pool, 2 + (rng.rand()<0.5?1:0));
-  const navPick = pickWeighted(nav, 1);
-  const all = pickWeighted([...base, ...dyn, ...navPick], 4);
-  all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
 }
 function gotoZone(key){
   state.locationKey=key;
@@ -601,7 +648,7 @@ function questSmuggler(){
 }
 
 // ———————————————————————————————————————————————————————————
-// 13) Actions générales & rencontres (toujours réactives)
+// 13) Actions générales & rencontres (réactives)
 // ———————————————————————————————————————————————————————————
 function useItemMenu(){
   clearChoices();
@@ -878,7 +925,7 @@ function chooseClass(){
 }
 
 // ———————————————————————————————————————————————————————————
-// 16) État initial & boot (corrigé : force le choix de classe au start)
+// 16) État initial & boot (force le choix de classe au start)
 // ———————————————————————————————————————————————————————————
 function initialState(){
   const baseHP = 20;
@@ -937,7 +984,18 @@ function setup(isNew=false){
   }
   explore(true);
 }
-function startAdventure(){ ui.log.innerHTML=""; refreshDerived(); setStats(); write("L'aventure commence !","info"); explore(true); }
+
+// Nouvelle aventure après choix de classe (corrigé : reset verrou & actions)
+function startAdventure(){
+  ui.log.innerHTML = "";
+  clearChoices();
+  _eventLocked = false; // s’assure qu’on n’est pas bloqué
+  refreshDerived();
+  setStats();
+  write("L'aventure commence !","info");
+  explore(true);
+}
+
 function gameOver(){
   state.inCombat=false;
   write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
