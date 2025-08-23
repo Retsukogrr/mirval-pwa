@@ -1,3 +1,133 @@
+/* ==== BOOT HOTFIX v10 — à coller tout en haut de game.js ==== */
+
+// utilitaires DOM tolérants (ne jettent jamais d'erreur si un ID manque)
+const $ = (id) => document.getElementById(id) || null;
+const safeSet = (el, text) => { if (el) el.textContent = text; };
+const safeHTML = (el, html) => { if (el) el.innerHTML = html; };
+
+// pré-déclare une petite API d'écriture de log qui ne crashe jamais
+const ui = {
+  log: $('log'),
+  choices: $('choices'),
+  hp: $('hp'), hpmax: $('hpmax'), hpbar: $('hpbar'),
+  gold: $('gold'), lvl: $('lvl'), xp: $('xp'),
+  inv: $('inventory'), loc: $('location'), day: $('day'),
+  lastRoll: $('lastRoll'), status: $('status'),
+  pclass: $('p-class'), pname: $('p-name'),
+  // use ids a-for / a-agi / a-esp / a-vit (exactement comme dans tes captures)
+  aFOR: $('a-for'), aAGI: $('a-agi'), aESP: $('a-esp'), aVIT: $('a-vit'),
+  rep: $('rep'), repLabel: $('rep-label'), quests: $('quests'),
+};
+
+function write(html, cls=""){
+  try{
+    const p = document.createElement('p');
+    if(cls) p.classList.add(cls);
+    p.innerHTML = html;
+    if (ui.log) {
+      ui.log.appendChild(p);
+      ui.log.scrollTop = ui.log.scrollHeight;
+    } else {
+      // secours : si #log n'existe pas encore, on trace en console
+      console.log('[LOG]', p.textContent || html);
+    }
+  }catch(e){
+    console.warn('write() fallback:', html);
+  }
+}
+
+let _eventLocked = false;
+function clearChoices(){ if(ui.choices) ui.choices.innerHTML = ""; _eventLocked=false; }
+function addChoice(label, handler, primary=false){
+  const btn = document.createElement('button');
+  if(primary) btn.classList.add('btn-primary');
+  btn.textContent = label;
+  btn.addEventListener('click', ()=>{
+    if(_eventLocked) return;
+    _eventLocked = true;
+    try{ handler(); }catch(err){
+      console.error('Action error:', err);
+      write(`⚠️ Action interrompue: ${err.message}`, 'warn');
+      _eventLocked = false;
+    }
+  });
+  if (ui.choices) ui.choices.appendChild(btn);
+}
+
+// remplace tes setStats()/repText existants PAR CES VERSIONS TOLÉRANTES
+function repText(n){ return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'; }
+function setStats(){
+  if(!window.state) return; // si l'état n'est pas encore prêt
+  safeSet(ui.hp, state.hp);
+  safeSet(ui.hpmax, state.hpMax);
+  if (ui.hpbar && state.hpMax>0) ui.hpbar.style.width = Math.max(0,Math.min(100,Math.round(100*state.hp/state.hpMax)))+'%';
+  safeSet(ui.gold, state.gold); safeSet(ui.lvl, state.level); safeSet(ui.xp, state.xp);
+  safeSet(ui.pclass, state.cls); safeSet(ui.pname, state.name);
+  safeSet(ui.rep, state.rep); safeSet(ui.repLabel, repText(state.rep));
+
+  safeSet(ui.aFOR, state.attrs?.FOR ?? 1);
+  safeSet(ui.aAGI, state.attrs?.AGI ?? 1);
+  safeSet(ui.aESP, state.attrs?.ESP ?? 1);
+  safeSet(ui.aVIT, state.attrs?.VIT ?? 1);
+
+  if (ui.status) ui.status.textContent = (state.status && state.status.length) ? state.status.map(s=>s.name).join(', ') : '—';
+
+  // inventaire
+  if (ui.inv){
+    ui.inv.innerHTML = "";
+    (state.inventory||[]).forEach(it=>{
+      const d=document.createElement('div'); d.className='stat';
+      const mods = it.mods ? Object.entries(it.mods).map(([k,v])=>`${v>0?'+':''}${v} ${k}`).join(', ') : (it.desc||'');
+      d.innerHTML = `<b>${it.name}</b><span>${mods}</span>`;
+      ui.inv.appendChild(d);
+    });
+  }
+  // quêtes
+  if (ui.quests){
+    ui.quests.innerHTML = "";
+    const main = document.createElement('div'); main.className='stat';
+    main.innerHTML = `<b>${state.quests?.main?.title||'—'}</b><span>${state.quests?.main?.state||'—'}</span>`;
+    ui.quests.appendChild(main);
+    const art = document.createElement('div'); art.className='stat';
+    art.innerHTML = `<b>Fragments d’artefact (${state.flags?.fragments||0}/3)</b><span>${state.quests?.artifacts?.state||'—'}</span>`;
+    ui.quests.appendChild(art);
+    (state.quests?.side||[]).forEach(q=>{
+      const x=document.createElement('div'); x.className='stat';
+      x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`;
+      ui.quests.appendChild(x);
+    });
+  }
+}
+
+// Affiche les erreurs globales dans le log (plus jamais “rien n’apparaît” sans raison)
+window.addEventListener('error', (e)=>{
+  console.error('JS error:', e.message, e.filename, e.lineno);
+  write(`⚠️ <b>Erreur JS</b> : ${e.message}`, 'warn');
+});
+
+// Kickstart : si au bout de 600ms il n’y a rien, on force chooseClass()
+(function kickstart(){
+  const tryKick = ()=>{
+    const noLog = !ui.log || ui.log.childElementCount===0;
+    const noChoices = !ui.choices || ui.choices.children.length===0;
+    if (noLog && noChoices) {
+      console.warn('[Mirval] Kickstart');
+      if (typeof setup === 'function') setup(true);
+      setTimeout(()=>{
+        if (typeof chooseClass === 'function') {
+          write('v10 — démarrage forcé, choisis ta classe.','sys');
+          try { clearChoices(); } catch(_){}
+          chooseClass();
+        }
+      }, 120);
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ()=> setTimeout(tryKick, 600), {once:true});
+  } else {
+    setTimeout(tryKick, 600);
+  }
+})();
 // === Aventurier de Mirval — game.js (v10++) ===
 // Correctifs combat (clics actifs), visuels SVG (pas d'assets externes),
 // système d'attributs FOR/AGI/ESP/VIT, compétences, équipements & vente,
