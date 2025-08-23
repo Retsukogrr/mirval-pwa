@@ -1,14 +1,19 @@
-// === Aventurier de Mirval — game.js (v10++) — Combat fix ===
-// Stats FOR/AGI/ESP/VIT, loot/achat/vente, PNJ réactifs, fragments & boss,
-// visuels SVG intégrés, correctifs d’UI (verrou robuste).
+// === Aventurier de Mirval — game.js (v10++) ===
+// Correctifs combat (clics actifs), visuels SVG (pas d'assets externes),
+// système d'attributs FOR/AGI/ESP/VIT, compétences, équipements & vente,
+// PNJ cohérents, fragments & boss, hub village, pas de sauvegarde/chargement.
 
-// 0) QoL mobile : écran éveillé
+// ———————————————————————————————————————————————————————————
+// 0) QoL mobile : garder l’écran éveillé (silencieux si non supporté)
+// ———————————————————————————————————————————————————————————
 let wakeLock;
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
 if('wakeLock' in navigator) keepAwake();
 
-// 1) RNG avec graine (xorshift) + badge
+// ———————————————————————————————————————————————————————————
+// 1) RNG avec graine (xorshift) + badge UI
+// ———————————————————————————————————————————————————————————
 const rng = (()=>{ 
   const seed = (crypto.getRandomValues?crypto.getRandomValues(new Uint32Array(1))[0]^Date.now():Date.now())>>>0;
   let s = seed>>>0;
@@ -18,7 +23,9 @@ const rng = (()=>{
 })();
 const seedInfoEl = document.getElementById('seedInfo'); if(seedInfoEl) seedInfoEl.textContent = `seed ${rng.seed}`;
 
-// 2) Références UI + utilitaires
+// ———————————————————————————————————————————————————————————
+/* 2) Références UI + utilitaires */
+// ———————————————————————————————————————————————————————————
 const ui = {
   log: document.getElementById('log'),
   choices: document.getElementById('choices'),
@@ -45,7 +52,7 @@ const ui = {
 };
 function write(html, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=html; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
 
-// Verrou anti-double-clic — robuste (auto-unlock)
+// --- Helpers UI robustes (corrigent le blocage des clics) ---
 let _eventLocked = false;
 function clearChoices(){
   if (ui && ui.choices) ui.choices.innerHTML = "";
@@ -55,16 +62,20 @@ function addChoice(label, handler, primary=false){
   const btn = document.createElement('button');
   if(primary) btn.classList.add('btn-primary');
   btn.textContent = label;
-  btn.addEventListener('click', ()=>{
+  btn.addEventListener('click', ()=> {
     if (_eventLocked) return;
-    _eventLocked = true;
-    btn.disabled = true;
+    _eventLocked = true;            // verrouille pendant l’action
     try { handler(); }
-    catch(err){ console.error('[Mirval] handler error:', err); write("⚠️ Quelque chose cloche, tu te ressaisis.","warn"); }
-    finally {
-      // Auto-déverrouille si le prochain écran n’a pas encore fait clearChoices()
-      setTimeout(()=>{ _eventLocked=false; try{ btn.disabled=false; }catch(_){} }, 120);
+    catch(err){
+      console.error('[Mirval] Action error:', err);
+      write("⚠️ Action interrompue.","warn");
+      // On redonne la main et propose un filet de sécurité
+      _eventLocked = false;
+      if(!ui.choices.children.length){
+        addChoice("Continuer", ()=>explore(true), true);
+      }
     }
+    // NOTE : le prochain écran appelle clearChoices() qui déverrouille.
   });
   ui.choices.appendChild(btn);
 }
@@ -73,14 +84,16 @@ function singleContinue(next=()=>explore()){
   addChoice("Continuer", ()=>next(), true);
 }
 
-// Neutralise d’éventuels boutons Sauvegarder/Charger (si HTML les contient)
+// Masque/neutralise d’éventuels boutons Sauvegarder/Charger si présents
 ['btn-save','btn-load'].forEach(id=>{
   const b=document.getElementById(id);
   if(b){ b.style.display='none'; b.onclick = ()=>{}; }
 });
 const resetBtn=document.getElementById('btn-reset'); if(resetBtn) resetBtn.onclick = ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
 
+// ———————————————————————————————————————————————————————————
 // 3) Visuels SVG (aucun asset externe)
+// ———————————————————————————————————————————————————————————
 function addScene(key){
   const div=document.createElement('div'); div.className='scene';
   div.innerHTML = scenes[key] || scenes.default;
@@ -127,10 +140,12 @@ function zoneScene(key){
   }
 }
 
+// ———————————————————————————————————————————————————————————
 // 4) Mécaniques de stats & affichage
+// ———————————————————————————————————————————————————————————
 function repText(n){ return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'; }
 function d20(mod=0){ const roll=rng.between(1,20); const total=roll+mod; if(ui.lastRoll) ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${roll} = ${total}`; return {roll,total}; }
-function maxHPFromVIT(base, vit){ return base + vit*3; }
+function maxHPFromVIT(base, vit){ return base + vit*3; } // VIT = +3 PV max par point
 
 function setStats(){
   ui.hp.textContent = state.hp;
@@ -162,7 +177,9 @@ function setStats(){
   state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
 }
 
-// 5) Aides gameplay + économie
+// ———————————————————————————————————————————————————————————
+// 5) Aides gameplay + économie + équipement
+// ———————————————————————————————————————————————————————————
 function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,"good"); }
 function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,"bad"); if(state.hp<=0){ gameOver(); return true; } return false; }
 function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n} (total: ${state.gold})`, n>=0?"good":"warn"); }
@@ -170,6 +187,7 @@ function gainXP(n){ state.xp+=n; write(`XP +${n} (total ${state.xp})`,"info"); c
 function rep(n){ state.rep+=n; setStats(); }
 
 function addItem(name,descOrMods){
+  // descOrMods peut être string (desc) ou {mods:{...}, price, tags}
   let item;
   if(typeof descOrMods==='string') item={name, desc:descOrMods};
   else item={name, ...descOrMods};
@@ -177,11 +195,9 @@ function addItem(name,descOrMods){
 }
 function hasItem(name){ return state.inventory.some(i=>i.name===name); }
 function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0){ state.inventory.splice(i,1); setStats(); } }
-
 function sellable(it){ return !(it.tags && it.tags.includes('quest')); }
 function sellValue(it){ const p = it.price || 4; return Math.max(1, Math.floor(p/2)); }
 
-// Dérivés combat tenant compte de l’équipement
 function equipmentMods(){
   const sum = {ATK:0, DEF:0, FOR:0, AGI:0, ESP:0, VIT:0};
   for(const it of state.inventory){
@@ -203,7 +219,10 @@ function refreshDerived(){
   state.hpMax = maxHPFromVIT(base, state.derived.VIT);
   if(state.hp>state.hpMax) state.hp=state.hpMax;
 }
-// 6) Progression : Level UP + choix d’attribut
+
+// ———————————————————————————————————————————————————————————
+// 6) Level-up + proposition de formation (compétences avancées)
+// ———————————————————————————————————————————————————————————
 function levelUp(){
   state.level++; state.xp=0;
   write(`<b>✨ Niveau ${state.level} !</b> Choisis un attribut à augmenter (+1).`,"good");
@@ -225,39 +244,35 @@ function levelUp(){
   }, i===0));
 }
 
-// 7) Compétences (classe + à apprendre)
+// ———————————————————————————————————————————————————————————
+// 7) Compétences (classe de base + à apprendre)
+// ———————————————————————————————————————————————————————————
 function mkSkill(name, cooldown, use, price=0, req=null){ return {name, cooldown, cd:0, use, price, req}; }
-
 const skillsLibrary = {
   baseWar: mkSkill('Frappe vaillante', 3, (e)=>{ const dmg=rng.between(2,6)+rng.between(2,6)+state.derived.FOR; e.hp-=dmg; write(`💥 Frappe vaillante : -${dmg} PV`,'good'); }),
   baseRogue: mkSkill('Coup de l’ombre', 3, (e)=>{ const r=d20(4+state.derived.AGI).total; if(r>=e.ac){ const steal=Math.min(3, state.gold); const dmg=rng.between(3,8)+steal; e.hp-=dmg; changeGold(steal); write(`🗡️ L’ombre frappe : -${dmg} PV`,'good'); } else write('Tu rates.','warn'); }),
   basePal: mkSkill('Lumière', 3, ()=>{ heal(rng.between(3,8)+state.derived.ESP); }),
   baseRgr: mkSkill('Tir précis', 2, (e)=>{ const r=d20(6+Math.floor(state.derived.AGI/2)).total; if(r>=e.ac){ const dmg=rng.between(3,8)+Math.floor(state.derived.AGI/2); e.hp-=dmg; write(`🏹 Tir précis : -${dmg} PV`,'good'); } else write('Tir manqué.','warn'); }),
   baseMyst: mkSkill('Onde arcanique', 3, (e)=>{ const dmg=rng.between(3,8)+Math.floor(state.derived.ESP/2); e.hp-=dmg; e.dotChance=Math.min(0.6,(e.dotChance||0)+0.15); write(`🔮 Onde arcanique : -${dmg} PV`,'good'); }),
-
   warCleave: mkSkill('Coup circulaire', 4, (e)=>{ const dmg=rng.between(4,7)+state.derived.FOR; e.hp-=dmg; write(`🪓 Coup circulaire : -${dmg} PV`,'good'); }, 8, s=>s.cls==='Guerrier'),
   rgrPoison: mkSkill('Flèche empoisonnée', 3, (e)=>{ const r=d20(4+state.derived.AGI).total; if(r>=e.ac){ const dmg=rng.between(2,6); e.hp-=dmg; state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)}); write(`🧪 Flèche empoisonnée : -${dmg} PV (+poison)`,'good'); } else write('La flèche manque.','warn'); }, 7, s=>s.cls==='Rôdeur'),
   palBless: mkSkill('Bénédiction', 4, ()=>{ heal(5+Math.floor(state.derived.ESP/2)); write('✨ Protection divine (DEF+1 pour 2 tours).','info'); state.buffs.push({type:'def', val:1, dur:2}); }, 7, s=>s.cls==='Paladin'),
   rogAssass: mkSkill('Assassinat', 4, (e)=>{ const r=d20(8+state.derived.AGI).total; if(r>=e.ac+2){ const dmg=rng.between(6,10)+Math.floor(state.derived.AGI/2); e.hp-=dmg; write(`🗡️ Assassinat : -${dmg} PV (critique)`,'good'); } else write("L'ennemi t'a vu, l'opportunité se perd.",'warn'); }, 9, s=>s.cls==='Voleur'),
   mysNova: mkSkill('Explosion arcanique', 4, (e)=>{ const dmg=rng.between(4,9)+Math.floor(state.derived.ESP/2); e.hp-=dmg; write(`💥 Explosion arcanique : -${dmg} PV`,'good'); }, 9, s=>s.cls==='Mystique'),
 };
-
 function offerSkillTraining(fromTrainer=false){
   addScene('trainer');
   write("🎓 Un maître propose de t’enseigner une compétence (payant).");
   clearChoices();
-
   const pool = [];
   if(state.cls==='Guerrier') pool.push(skillsLibrary.warCleave);
   if(state.cls==='Rôdeur')  pool.push(skillsLibrary.rgrPoison);
   if(state.cls==='Paladin') pool.push(skillsLibrary.palBless);
   if(state.cls==='Voleur')  pool.push(skillsLibrary.rogAssass);
   if(state.cls==='Mystique')pool.push(skillsLibrary.mysNova);
-
   const known = new Set(state.skills.map(s=>s.name));
   const candidates = pool.filter(s=>!known.has(s.name));
   if(candidates.length===0){ write("Tu maîtrises déjà tout ce qui est proposé.","info"); return singleContinue(fromTrainer?villageHub:explore); }
-
   candidates.forEach((sk,i)=>{
     addChoice(`Apprendre: ${sk.name} (${sk.price} or)`, ()=>{
       if(state.gold<sk.price){ write("Pas assez d'or.",'warn'); return singleContinue(fromTrainer?villageHub:explore); }
@@ -268,7 +283,9 @@ function offerSkillTraining(fromTrainer=false){
   addChoice("Plus tard", ()=>singleContinue(fromTrainer?villageHub:explore));
 }
 
-// 8) Équipement : achat/vente (village & forgeron)
+// ———————————————————————————————————————————————————————————
+// 8) Boutique : stock marché & forge (achat/vente)
+// ———————————————————————————————————————————————————————————
 const shopStock = {
   market: [
     {name:'Potion de soin', price:5, mods:null, desc:'Restaure 8–12 PV', tags:['consumable']},
@@ -306,7 +323,9 @@ function sellMenu(back){
   addChoice("Ne rien vendre", ()=>singleContinue(back));
 }
 
-// 9) Combat (modifs robustes anti-blocage)
+// ———————————————————————————————————————————————————————————
+// 9) COMBAT — CORRIGÉ (actions cliquables, pas de blocage)
+// ———————————————————————————————————————————————————————————
 function playerAtkMod(){
   let m = Math.floor(state.derived.FOR/2) + state.derived.ATK;
   if(state.cls==='Guerrier') m += 1;
@@ -326,77 +345,49 @@ function combat(mon){
   write(`<b>${mon.name}</b> apparaît ! ❤️ ${mon.hp} — CA ${mon.ac}`,"warn");
   combatTurn();
 }
+function aimMenu(){
+  clearChoices(); const e=state.enemy;
+  addChoice('Viser la tête', ()=>{ const r=d20(playerAtkMod()-2 + terrainPenalty()).total; if(r>=e.ac+2){ const dmg=rng.between(6,10); e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good') } else write('Tu manques la tête.','warn'); enemyAttack(); combatTurn(); }, true);
+  addChoice('Viser le torse', ()=>{ const r=d20(playerAtkMod() + terrainPenalty()).total; if(r>=e.ac){ const dmg=rng.between(3,7); e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good') } else write('Tu manques.','warn'); enemyAttack(); combatTurn(); });
+  addChoice('Viser les jambes', ()=>{ const r=d20(playerAtkMod()+1 + terrainPenalty()).total; if(r>=e.ac-1){ const dmg=rng.between(2,5); e.hp-=dmg; state.status.push({type:'slow',name:'Ralentissement',dur:2}); write(`🦵 Frappe aux jambes : -${dmg} PV (ennemi ralenti)`,`good`) } else write('Tu manques les jambes.','warn'); enemyAttack(); combatTurn(); });
+  addChoice('Annuler', combatTurn);
+}
 function combatTurn(){
   if(!state.inCombat) return;
   if(state.hp<=0){ gameOver(); return; }
-  if(!state.enemy) { write("…plus d’ennemi.","info"); explore(); return; }
   if(state.enemy.hp<=0){ write(`<b>${state.enemy.name} est vaincu !</b>`,"good"); afterCombat(); return; }
-
-  clearChoices(); // déverrouille
+  clearChoices();
   const e=state.enemy;
 
   addChoice(`Attaquer`, ()=> aimMenu(), true);
-
   addChoice(`Parer`, ()=>{
     const r = d20(e.hitMod).total;
     const armor = playerDef() + 1;
-    if(r>=armor){ const dmg=Math.max(0,rng.between(1,3+e.tier)-2); write(`Parade partielle, -${dmg} PV.`,"warn"); if(damage(dmg,e.name)) return; }
+    if(r>=armor){ const dmg=Math.max(0,rng.between(1,3+e.tier)-2); write(`Parade partielle, -${dmg} PV.`,"warn"); damage(dmg,e.name); }
     else write("Tu pares complètement !","good");
-    enemyAttack(); // l’adversaire joue derrière
     combatTurn();
   });
 
-  addChoice(`Compétence (${state.skill?.name||'—'})`, ()=>{
+  addChoice(`Compétence (${state.skill.name||'—'})`, ()=>{
     if(!state.skill || !state.skill.use){ write("Pas de compétence de base.","warn"); return combatTurn(); }
     if(state.skill.cd>0){ write("Compétence en recharge.","warn"); return combatTurn(); }
     state.skill.use(e); state.skill.cd = state.skill.cooldown||3;
-    if(e.hp>0) enemyAttack();
-    combatTurn();
+    if(e.hp>0) enemyAttack(); combatTurn();
   });
 
   if(state.skills && state.skills.length>0){
-    addChoice("Autres compétences…", ()=> skillsMenu());
+    addChoice("Autres compétences…", ()=> skillsMenu(), false);
   }
 
   addChoice(`Potion (${state.potions})`, ()=>{
     if(state.potions<=0){ write("Plus de potions.","warn"); return combatTurn(); }
-    state.potions--; heal(rng.between(8,12));
-    enemyAttack(); combatTurn();
+    state.potions--; heal(rng.between(8,12)); enemyAttack(); combatTurn();
   });
-
   addChoice(`Fuir`, ()=>{
     const r=d20(Math.floor(state.derived.AGI/2)).total;
     if(r>=14){ write("Tu fuis le combat.","sys"); state.inCombat=false; state.enemy=null; explore(); }
     else { write("Échec de fuite !","bad"); enemyAttack(); combatTurn(); }
   });
-}
-function aimMenu(){
-  clearChoices(); const e=state.enemy;
-  addChoice('Viser la tête', ()=>{
-    const r=d20(playerAtkMod()-2 + terrainPenalty()).total; 
-    if(r>=e.ac+2){ const dmg=rng.between(6,10); e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); } 
-    else write('Tu manques la tête.','warn'); 
-    if(e.hp>0) enemyAttack(); 
-    combatTurn();
-  }, true);
-
-  addChoice('Viser le torse', ()=>{
-    const r=d20(playerAtkMod() + terrainPenalty()).total; 
-    if(r>=e.ac){ const dmg=rng.between(3,7); e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); } 
-    else write('Tu manques.','warn'); 
-    if(e.hp>0) enemyAttack(); 
-    combatTurn();
-  });
-
-  addChoice('Viser les jambes', ()=>{
-    const r=d20(playerAtkMod()+1 + terrainPenalty()).total; 
-    if(r>=e.ac-1){ const dmg=rng.between(2,5); e.hp-=dmg; state.status.push({type:'slow',name:'Ralentissement',dur:2}); write(`🦵 Frappe aux jambes : -${dmg} PV (ennemi ralenti)`,`good`); } 
-    else write('Tu manques les jambes.','warn'); 
-    if(e.hp>0) enemyAttack(); 
-    combatTurn();
-  });
-
-  addChoice('Retour', combatTurn);
 }
 function skillsMenu(){
   clearChoices();
@@ -404,20 +395,19 @@ function skillsMenu(){
     addChoice(`${sk.name} ${sk.cd>0?`(cd ${sk.cd})`:''}`, ()=>{
       if(sk.cd>0){ write("Compétence en recharge.","warn"); return combatTurn(); }
       sk.use(state.enemy); sk.cd = sk.cooldown||3;
-      if(state.enemy && state.enemy.hp>0) enemyAttack();
+      if(state.enemy.hp>0) enemyAttack();
       combatTurn();
     }, i===0);
   });
   addChoice("Retour", combatTurn);
 }
 function enemyAttack(){
-  const e=state.enemy; if(!e) return;
-  const roll=d20(e.hitMod).total; const def=playerDef()+terrainPenalty();
+  const e=state.enemy; const roll=d20(e.hitMod).total; const def=playerDef()+terrainPenalty();
   if(roll>=def){
     let dmg=rng.between(1,3+e.tier);
     if(state.buffs.some(b=>b.type==='deflect')){ dmg=Math.max(0,dmg-1); }
     if(e.name.includes('Bandit') && rng.rand()<0.2){ changeGold(-1); write('🪙 Le bandit te détrousse !','warn'); }
-    if(damage(dmg,e.name)) return;
+    damage(dmg,e.name);
     if(e.dotChance && rng.rand()<e.dotChance){
       if(e.dotType==='poison') state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)});
       if(e.dotType==='bleed')  state.status.push({type:'bleed',  name:'Saignement', dur:rng.between(2,4)});
@@ -449,8 +439,9 @@ function afterCombat(){
   }
   explore();
 }
-
-// 10) Bestiaire + Boss + Mini-boss (fragments)
+// ———————————————————————————————————————————————————————————
+// 10) Bestiaire + Boss
+// ———————————————————————————————————————————————————————————
 const mobTemplates = {
   wolf: ()=>({ name:"Loup affamé", hp:10, maxHp:10, ac:11, hitMod:2, tier:1, dotChance:0, dotType:null, scene:'loup' }),
   bandit: ()=>({ name:"Bandit des fourrés", hp:12, maxHp:12, ac:12, hitMod:3, tier:2, dotChance:0.1, dotType:'bleed', scene:'bandit' }),
@@ -458,15 +449,7 @@ const mobTemplates = {
   harpy: ()=>({ name:"Harpie du vent", hp:14, maxHp:14, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'bleed', scene:'harpy' }),
   ghoul: ()=>({ name:"Goule des roseaux", hp:13, maxHp:13, ac:12, hitMod:3, tier:2, dotChance:0.25, dotType:'poison', scene:'ghoul' }),
   chief: ()=>({ name:"Chef Bandit", hp:26, maxHp:26, ac:14, hitMod:5, tier:3, dotChance:0.3, dotType:'bleed', scene:'boss' }),
-  guardian:`Gardienne des Roseaux`,
-  matriarch:`Harpie Matriarche`,
-  specter:`Spectre des Ruines`,
 };
-function miniBoss(name){
-  if(name===mobTemplates.guardian) return { name:"Gardienne des Roseaux", hp:20, maxHp:20, ac:13, hitMod:4, tier:3, dotChance:0.25, dotType:'poison', scene:'ghoul' };
-  if(name===mobTemplates.matriarch) return { name:"Harpie Matriarche", hp:22, maxHp:22, ac:14, hitMod:5, tier:3, dotChance:0.2, dotType:'bleed', scene:'harpy' };
-  return { name:"Spectre des Ruines", hp:18, maxHp:18, ac:14, hitMod:5, tier:3, dotChance:0.15, dotType:null, scene:'ruins' };
-}
 function combatBoss(){
   const boss = mobTemplates.chief();
   addScene('boss'); write('🥷 Tu t’infiltres dans la planque du Chef Bandit.','warn');
@@ -479,14 +462,184 @@ function combatBoss(){
     _enemyAttack();
   }
 }
-/* ================================
-   🔷 BLOC 3/3 — v10++ (fin du fichier)
-   Sections : Village & boutiques, actions, PNJ/événements, mini-boss & fragments,
-              fins, choix de classe, état initial, setup/boot, tickStatus
-   ================================ */
 
 // ———————————————————————————————————————————————————————————
-// 12) Village : Hub (achat/vente/chapelle/forge/maître)
+// 11) Temps & exploration (sécurisé, anti-bloqueur)
+// ———————————————————————————————————————————————————————————
+function setTime(){
+  const slots=["Aube","Matin","Midi","Après-midi","Crépuscule","Nuit"];
+  const idx=slots.indexOf(state.time); let n=(idx+1)%slots.length; if(n===0) state.day++;
+  state.time=slots[n]; ui.day.textContent=`Jour ${state.day} — ${state.time}`;
+}
+function pickWeighted(items, k){
+  const recent = new Set(state.lastLabels);
+  let pool = items.flatMap(it => Array((it.w||1)).fill(it)).filter(it=> !recent.has(it.label));
+  if(pool.length<k) pool = items.flatMap(it => Array((it.w||1)).fill(it));
+  const out=[];
+  for(let i=0;i<k && pool.length;i++){ const idx=Math.floor(rng.rand()*pool.length); out.push(pool[idx]); pool=pool.filter((_,j)=>j!==idx); }
+  state.lastLabels = [...out.map(o=>o.label), ...state.lastLabels].slice(0,8);
+  return out;
+}
+function explore(initial=false){
+  try{
+    refreshDerived();
+    setStats();
+    ui.loc.textContent = state.location;
+    ui.day.textContent = `Jour ${state.day} — ${state.time}`;
+
+    clearChoices();            // ← remet l'état sain & déverrouille
+    if(!initial) setTime();
+    tickStatus();
+    if(state.hp<=0) return;
+
+    addScene(zoneScene(state.locationKey));
+
+    // événements “prioritaires”
+    if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
+    if(state.locationKey==='village'){ villageHub(); return; }
+
+    const zone = state.locationKey;
+
+    // base toujours présente
+    const base = [
+      { label:"Fouiller", act:searchArea, w:2 },
+      { label:"Se reposer", act:rest, w:1 },
+      { label:"Utiliser un objet", act:useItemMenu, w:1 }
+    ];
+
+    // pool dynamique par zone
+    let pool=[];
+    if(zone==='marais'){
+      pool.push({label:'Suivre des feux-follets', act:eventSanctuary, w:2});
+      pool.push({label:'Aider un captif', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); singleContinue(); } }, w:1});
+      pool.push({label:'Traquer une goule', act:()=>combat(mobTemplates.ghoul()), w:3});
+      pool.push({label:'Affronter un loup', act:()=>combat(mobTemplates.wolf()), w:2});
+      pool.push({label:'Biche prise au collet', act:eventRescueDoe, w:1});
+      pool.push({label:'Tomber sur un piège', act:()=>{ eventTrap(); singleContinue(); }, w:1});
+      if(!state.flags.frag1) pool.push({label:'Rumeur: Gardienne des Roseaux', act:()=>eventMiniBoss(1), w:1});
+    } else if(zone==='clairiere'){
+      pool.push({label:'Croiser une herboriste', act:eventHerbalist, w:2});
+      pool.push({label:'Écouter un barde', act:eventBard, w:1});
+      pool.push({label:'Chasser un sanglier', act:()=>combat(mobTemplates.boar()), w:2});
+      pool.push({label:'Autel moussu', act:eventSanctuary, w:1});
+      pool.push({label:'Rencontrer un forgeron', act:eventSmith, w:1});
+      pool.push({label:'Pèlerin perdu', act:eventEscortPilgrim, w:1});
+      pool.push({label:'Médaillon égaré', act:eventReturnLocket, w:1});
+    } else if(zone==='colline'){
+      pool.push({label:'Rencontrer un ermite', act:eventHermit, w:2});
+      pool.push({label:'Sentier vers les ruines', act:()=>gotoZone('ruines'), w:1});
+      pool.push({label:'Affronter une harpie', act:()=>combat(mobTemplates.harpy()), w:3});
+      if(!state.flags.frag2) pool.push({label:'Nid de la Matriarche', act:()=>eventMiniBoss(2), w:1});
+      pool.push({label:'Convoi marchand', act:eventMerchantAmbush, w:1});
+    } else if(zone==='ruines'){
+      pool.push({label:'Fouiller les décombres', act:eventRuins, w:3});
+      pool.push({label:'Écarter des pierres instables', act:()=>{ if(d20().total<10) damage(rng.between(1,4),'Éboulement'); else write("Tu avances prudemment."); singleContinue(); }, w:1});
+      pool.push({label:'Combattre des bandits', act:()=>combat(mobTemplates.bandit()), w:2});
+      if(!state.flags.frag3) pool.push({label:'Voix dans la pierre', act:()=>eventMiniBoss(3), w:1});
+    } else if(zone==='grotte'){
+      pool.push({label:'Affronter une goule ancienne', act:()=>combat({name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison', scene:'ghoul'}), w:3});
+      pool.push({label:'Échos inquiétants', act:()=>{ const r=d20().total; if(r<10) damage(3,'Stalactite'); else write('Rien ne se passe.'); singleContinue(); }, w:1});
+    }
+
+    if(state.flags.bossUnlocked)
+      pool.push({label:"Traquer le Chef Bandit", act:()=>combatBoss(), w:1});
+
+    // navigation (village débloqué)
+    const nav = [
+      {label:'→ Village', act:()=>gotoZone('village'), w: state.flags.villageUnlocked?1:0},
+      {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
+      {label:'→ Clairière', act:()=>gotoZone('clairiere'), w:1},
+      {label:'→ Colline', act:()=>gotoZone('colline'), w:1},
+      {label:'→ Ruines', act:()=>gotoZone('ruines'), w:1},
+      {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer. Trouve une torche.','warn'), singleContinue()), w:1}
+    ].filter(x=>x.w>0);
+
+    // tirage non redondant
+    const dyn = pickWeighted(pool, 2 + (rng.rand()<0.5?1:0));
+    const navPick = pickWeighted(nav, 1);
+    const all = pickWeighted([...base, ...dyn, ...navPick], 4);
+
+    all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
+
+    // filet de sécurité : s'il n'y a pas de boutons
+    if (!ui.choices.children.length){
+      console.warn('[Mirval] Fallback explore: aucun choix rendu, on injecte un set minimal.');
+      addChoice("Fouiller", searchArea, true);
+      addChoice("Se reposer", rest);
+      addChoice("→ Clairière", ()=>gotoZone('clairiere'));
+      addChoice("→ Village", ()=>gotoZone('village'));
+    }
+  } catch(err){
+    console.error('[Mirval] explore() error:', err);
+    write("⚠️ Un imprévu survient, tu reprends tes esprits…","warn");
+    // fallback basique
+    clearChoices();
+    addChoice("Fouiller", searchArea, true);
+    addChoice("Se reposer", rest);
+    addChoice("→ Clairière", ()=>gotoZone('clairiere'));
+    addChoice("→ Village", ()=>gotoZone('village'));
+  }
+}
+function gotoZone(key){
+  state.locationKey=key;
+  state.location = key==='marais'?"Marais de Vire-Saule":
+                   key==='clairiere'?"Clairière des Lys":
+                   key==='colline'?"Colline de Rocfauve":
+                   key==='ruines'?"Ruines Oubliées":
+                   key==='grotte'?"Grotte Sépulcrale":
+                   key==='village'?"Village de Mirval":"Lisière";
+  write(`👉 Tu te diriges vers ${state.location}.`,"sys");
+  explore(true);
+}
+
+// ———————————————————————————————————————————————————————————
+// 12) Rencontres forcées / aléatoires (PNJ/ennemis)
+// ———————————————————————————————————————————————————————————
+function useItemMenu(){
+  clearChoices();
+  addChoice(`Boire une potion (${state.potions})`, ()=>{
+    if(state.potions<=0){ write("Tu n'as pas de potion.","warn"); return singleContinue(); }
+    state.potions--; heal(rng.between(8,12)); singleContinue();
+  }, true);
+  addChoice("Annuler", ()=>explore());
+}
+function chest(){
+  const r=rng.between(1,100);
+  if(r>94){ addItem("Bouclier en fer",{mods:{DEF:+2}, price:6}); }
+  else if(r>78){ state.potions++; write("Tu trouves une potion.","good"); }
+  else if(r>48){ changeGold(rng.between(7,15)); }
+  else { write("💥 Piège !","bad"); damage(rng.between(3,6),"Piège"); }
+}
+function searchArea(){
+  const {total} = d20(Math.floor(state.derived.ESP/3));
+  if(total>=18){ write("🔑 Coffre scellé trouvé !","good"); chest(); singleContinue(); return; }
+  if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); singleContinue(); return; }
+  write("…Tu repères des traces fraîches. Quelque chose s’approche !");
+  forcedEncounter();
+}
+function rest(){
+  if(rng.rand()<0.35){
+    write("Quelque chose approche pendant ton repos…","warn");
+    forcedEncounter();
+  } else {
+    heal(rng.between(4,8)); write("Tu dors un peu. Ça fait du bien.","good"); singleContinue();
+  }
+}
+function forcedEncounter(){
+  const roll=rng.rand(); const zone=state.locationKey;
+  if(roll<0.6){
+    if(zone==='marais') return combat(mobTemplates.ghoul());
+    if(zone==='clairiere') return combat(mobTemplates.bandit());
+    if(zone==='ruines') return combat(mobTemplates.bandit());
+    return combat(mobTemplates.harpy());
+  } else {
+    const events = [eventHerbalist,eventSmith,eventHermit,eventSanctuary,eventRescueDoe,eventEscortPilgrim,eventReturnLocket,eventMerchantAmbush];
+    return events[rng.between(0,events.length-1)]();
+  }
+}
+function randomEncounter(){ return forcedEncounter(); }
+// ———————————————————————————————————————————————————————————
+// 13) Village : Hub (achat/vente/chapelle/forge/maître)
 // ———————————————————————————————————————————————————————————
 function villageHub(){
   refreshDerived(); setStats(); addScene('zone_village');
@@ -541,54 +694,7 @@ function questSmuggler(){
 }
 
 // ———————————————————————————————————————————————————————————
-// 13) Actions générales & rencontres (réactives)
-// ———————————————————————————————————————————————————————————
-function useItemMenu(){
-  clearChoices();
-  addChoice(`Boire une potion (${state.potions})`, ()=>{
-    if(state.potions<=0){ write("Tu n'as pas de potion.","warn"); return singleContinue(); }
-    state.potions--; heal(rng.between(8,12)); singleContinue();
-  }, true);
-  addChoice("Annuler", ()=>explore());
-}
-function chest(){
-  const r=rng.between(1,100);
-  if(r>94){ addItem("Bouclier en fer",{mods:{DEF:+2}, price:6}); }
-  else if(r>78){ state.potions++; write("Tu trouves une potion.","good"); }
-  else if(r>48){ changeGold(rng.between(7,15)); }
-  else { write("💥 Piège !","bad"); damage(rng.between(3,6),"Piège"); }
-}
-function searchArea(){
-  const {total} = d20(Math.floor(state.derived.ESP/3));
-  if(total>=18){ write("🔑 Coffre scellé trouvé !","good"); chest(); singleContinue(); return; }
-  if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); singleContinue(); return; }
-  write("…Tu repères des traces fraîches. Quelque chose s’approche !");
-  forcedEncounter();
-}
-function rest(){
-  if(rng.rand()<0.35){
-    write("Quelque chose approche pendant ton repos…","warn");
-    forcedEncounter();
-  } else {
-    heal(rng.between(4,8)); write("Tu dors un peu. Ça fait du bien.","good"); singleContinue();
-  }
-}
-function forcedEncounter(){
-  const roll=rng.rand(); const zone=state.locationKey;
-  if(roll<0.6){
-    if(zone==='marais') return combat(mobTemplates.ghoul());
-    if(zone==='clairiere') return combat(mobTemplates.bandit());
-    if(zone==='ruines') return combat(mobTemplates.bandit());
-    return combat(mobTemplates.harpy());
-  } else {
-    const events = [eventHerbalist,eventSmith,eventHermit,eventSanctuary,eventRescueDoe,eventEscortPilgrim,eventReturnLocket,eventMerchantAmbush];
-    return events[rng.between(0,events.length-1)]();
-  }
-}
-function randomEncounter(){ return forcedEncounter(); }
-
-// ———————————————————————————————————————————————————————————
-// 14) PNJ & événements (cohérents et riches)
+// 14) PNJ & événements
 // ———————————————————————————————————————————————————————————
 function eventHerbalist(){
   addScene('herbalist'); write("🌿 Une herboriste s’approche, panier d’herbes en main."); clearChoices();
@@ -877,7 +983,7 @@ function setup(isNew=false){
   explore(true);
 }
 
-// Nouvelle aventure après choix de classe (corrigé : reset verrou & actions)
+// Nouvelle aventure après choix de classe (reset verrou & actions)
 function startAdventure(){
   ui.log.innerHTML = "";
   clearChoices();
