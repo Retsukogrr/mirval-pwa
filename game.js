@@ -1,5 +1,6 @@
-// === Aventurier de Mirval — game.js (v10++ RPG complet : FOR/AGI/ESP/VIT, compétences, shops, vente) ===
-console.log("game.js v10++ chargé");
+// === Aventurier de Mirval — game.js (v10++) ===
+// RPG complet : FOR/AGI/ESP/VIT, compétences, shops (achat/vente), PNJ réactifs, fragments & boss.
+// Corrigé : le menu de CLASSE s’affiche toujours dès le démarrage.
 
 // ———————————————————————————————————————————————————————————
 // 0) QoL mobile : écran éveillé
@@ -40,11 +41,10 @@ const ui = {
   status: document.getElementById('status'),
   pclass: document.getElementById('p-class'),
   pname: document.getElementById('p-name'),
-  // nouvelles stats :
-  aFOR: document.getElementById('a-str') || document.getElementById('a-FOR'),
+  aFOR: document.getElementById('a-FOR') || document.getElementById('a-for'),
   aAGI: document.getElementById('a-agi'),
-  aESP: document.getElementById('a-wis') || document.getElementById('a-ESP'),
-  aVIT: document.getElementById('a-vit') || document.getElementById('a-VIT'),
+  aESP: document.getElementById('a-ESP') || document.getElementById('a-esp'),
+  aVIT: document.getElementById('a-VIT') || document.getElementById('a-vit'),
   rep: document.getElementById('rep'),
   repLabel: document.getElementById('rep-label'),
   quests: document.getElementById('quests'),
@@ -64,7 +64,7 @@ function addChoice(label, handler, primary=false){
 }
 function singleContinue(next=()=>explore()){ clearChoices(); addChoice("Continuer", ()=>next(), true); }
 
-// Masque/neutralise les boutons Sauvegarder/Charger si présents
+// Masque/neutralise d’éventuels boutons Sauvegarder/Charger si présents
 ['btn-save','btn-load'].forEach(id=>{
   const b=document.getElementById(id);
   if(b){ b.style.display='none'; b.onclick = ()=>{}; }
@@ -134,7 +134,7 @@ function setStats(){
   ui.gold.textContent = state.gold; ui.lvl.textContent = state.level; ui.xp.textContent = state.xp;
   ui.status.textContent = state.status.length? state.status.map(s=>s.name).join(', ') : '—';
   ui.pclass.textContent = state.cls; ui.pname.textContent = state.name;
-  // nouvelles stats
+
   if(ui.aFOR) ui.aFOR.textContent = state.attrs.FOR;
   if(ui.aAGI) ui.aAGI.textContent = state.attrs.AGI;
   if(ui.aESP) ui.aESP.textContent = state.attrs.ESP;
@@ -142,7 +142,6 @@ function setStats(){
 
   ui.rep.textContent = state.rep; ui.repLabel.textContent = repText(state.rep);
 
-  // inventaire
   ui.inv.innerHTML="";
   state.inventory.forEach(it=>{
     const d=document.createElement('div'); d.className='stat';
@@ -190,7 +189,6 @@ function equipmentMods(){
 }
 function refreshDerived(){
   const eq = equipmentMods();
-  // stats “totales” (base + équipements)
   state.derived = {
     FOR: state.attrs.FOR + eq.FOR,
     AGI: state.attrs.AGI + eq.AGI,
@@ -199,7 +197,6 @@ function refreshDerived(){
     ATK: eq.ATK||0,
     DEF: eq.DEF||0
   };
-  // hpMax réévalué avec VIT totale
   const base = state.baseHP;
   state.hpMax = maxHPFromVIT(base, state.derived.VIT);
   if(state.hp>state.hpMax) state.hp=state.hpMax;
@@ -213,21 +210,17 @@ function levelUp(){
   write(`<b>✨ Niveau ${state.level} !</b> Choisis un attribut à augmenter (+1).`,"good");
   clearChoices();
   const choices = [
-    {k:'FOR', label:'FOR (Force)', info:'+ dégâts & tests de puissance'},
-    {k:'AGI', label:'AGI (Agilité)', info:'+ esquive & fuite'},
-    {k:'ESP', label:'ESP (Esprit)', info:'+ magie & interactions mystiques'},
-    {k:'VIT', label:'VIT (Vitalité)', info:'+ PV max & résistances'}
+    {k:'FOR', label:'FOR (Force)'},
+    {k:'AGI', label:'AGI (Agilité)'},
+    {k:'ESP', label:'ESP (Esprit)'},
+    {k:'VIT', label:'VIT (Vitalité)'},
   ];
   choices.forEach((c,i)=> addChoice(`${c.label}`, ()=>{
-    state.attrs[c.k]++; // augmente la stat de base
+    state.attrs[c.k]++;
     refreshDerived();
-    // bonus PV immédiat si VIT choisie
     if(c.k==='VIT'){ const old=state.hpMax; state.hpMax = maxHPFromVIT(state.baseHP, state.derived.VIT); const delta=state.hpMax-old; state.hp += Math.max(0, delta); }
     setStats();
-    // petite chance d’apprendre une compétence
     if(rng.rand()<0.5) offerSkillTraining();
-    else { write("Tu te sens plus fort(e).","info"); }
-    // PV restaurés un peu au level-up
     heal(4);
     explore(true);
   }, i===0));
@@ -245,30 +238,28 @@ const skillsLibrary = {
   baseRgr: mkSkill('Tir précis', 2, (e)=>{ const r=d20(6+Math.floor(state.derived.AGI/2)).total; if(r>=e.ac){ const dmg=rng.between(3,8)+Math.floor(state.derived.AGI/2); e.hp-=dmg; write(`🏹 Tir précis : -${dmg} PV`,'good'); } else write('Tir manqué.','warn'); }),
   baseMyst: mkSkill('Onde arcanique', 3, (e)=>{ const dmg=rng.between(3,8)+Math.floor(state.derived.ESP/2); e.hp-=dmg; e.dotChance=Math.min(0.6,(e.dotChance||0)+0.15); write(`🔮 Onde arcanique : -${dmg} PV`,'good'); }),
 
-  // Compétences à apprendre
   warCleave: mkSkill('Coup circulaire', 4, (e)=>{ const dmg=rng.between(4,7)+state.derived.FOR; e.hp-=dmg; write(`🪓 Coup circulaire : -${dmg} PV`,'good'); }, 8, s=>s.cls==='Guerrier'),
   rgrPoison: mkSkill('Flèche empoisonnée', 3, (e)=>{ const r=d20(4+state.derived.AGI).total; if(r>=e.ac){ const dmg=rng.between(2,6); e.hp-=dmg; state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)}); write(`🧪 Flèche empoisonnée : -${dmg} PV (+poison)`,'good'); } else write('La flèche manque.','warn'); }, 7, s=>s.cls==='Rôdeur'),
-  palBless: mkSkill('Bénédiction', 4, ()=>{ heal(5+Math.floor(state.derived.ESP/2)); write('✨ Tu sens une protection t’entourer (DEF+1 pour 2 tours).','info'); state.buffs.push({type:'def', val:1, dur:2}); }, 7, s=>s.cls==='Paladin'),
+  palBless: mkSkill('Bénédiction', 4, ()=>{ heal(5+Math.floor(state.derived.ESP/2)); write('✨ Protection divine (DEF+1 pour 2 tours).','info'); state.buffs.push({type:'def', val:1, dur:2}); }, 7, s=>s.cls==='Paladin'),
   rogAssass: mkSkill('Assassinat', 4, (e)=>{ const r=d20(8+state.derived.AGI).total; if(r>=e.ac+2){ const dmg=rng.between(6,10)+Math.floor(state.derived.AGI/2); e.hp-=dmg; write(`🗡️ Assassinat : -${dmg} PV (critique)`,'good'); } else write("L'ennemi t'a vu, l'opportunité se perd.",'warn'); }, 9, s=>s.cls==='Voleur'),
   mysNova: mkSkill('Explosion arcanique', 4, (e)=>{ const dmg=rng.between(4,9)+Math.floor(state.derived.ESP/2); e.hp-=dmg; write(`💥 Explosion arcanique : -${dmg} PV`,'good'); }, 9, s=>s.cls==='Mystique'),
 };
 
 function offerSkillTraining(fromTrainer=false){
   addScene('trainer');
-  write("🎓 Un maître est prêt à t’enseigner une compétence (contre paiement).");
+  write("🎓 Un maître propose de t’enseigner une compétence (payant).");
   clearChoices();
 
   const pool = [];
-  if(state.cls==='Guerrier'){ pool.push(skillsLibrary.warCleave); }
-  if(state.cls==='Rôdeur'){ pool.push(skillsLibrary.rgrPoison); }
-  if(state.cls==='Paladin'){ pool.push(skillsLibrary.palBless); }
-  if(state.cls==='Voleur'){ pool.push(skillsLibrary.rogAssass); }
-  if(state.cls==='Mystique'){ pool.push(skillsLibrary.mysNova); }
+  if(state.cls==='Guerrier') pool.push(skillsLibrary.warCleave);
+  if(state.cls==='Rôdeur')  pool.push(skillsLibrary.rgrPoison);
+  if(state.cls==='Paladin') pool.push(skillsLibrary.palBless);
+  if(state.cls==='Voleur')  pool.push(skillsLibrary.rogAssass);
+  if(state.cls==='Mystique')pool.push(skillsLibrary.mysNova);
 
-  // Filtrer celles déjà apprises
   const known = new Set(state.skills.map(s=>s.name));
   const candidates = pool.filter(s=>!known.has(s.name));
-  if(candidates.length===0){ write("Tu maîtrises déjà toutes les techniques proposées.","info"); return singleContinue(fromTrainer?villageHub:explore); }
+  if(candidates.length===0){ write("Tu maîtrises déjà tout ce qui est proposé.","info"); return singleContinue(fromTrainer?villageHub:explore); }
 
   candidates.forEach((sk,i)=>{
     addChoice(`Apprendre: ${sk.name} (${sk.price} or)`, ()=>{
@@ -324,13 +315,11 @@ function sellMenu(back){
 // 9) Combat (tenant compte des stats & buffs)
 // ———————————————————————————————————————————————————————————
 function playerAtkMod(){
-  // Base d20 + FOR/2 + ATK d’équipement + bonus classe Guerrier
   let m = Math.floor(state.derived.FOR/2) + state.derived.ATK;
   if(state.cls==='Guerrier') m += 1;
   return m;
 }
 function playerDef(){
-  // 10 + DEF équipement + AGI/2 + buff + bonus Paladin
   let m = 10 + state.derived.DEF + Math.floor(state.derived.AGI/2);
   if(state.cls==='Paladin') m += 1;
   const addBuff = state.buffs.filter(b=>b.type==='def').reduce((a,b)=>a+b.val,0);
@@ -354,13 +343,12 @@ function combatTurn(){
   addChoice(`Attaquer`, ()=> aimMenu(), true);
   addChoice(`Parer`, ()=>{
     const r = d20(e.hitMod).total;
-    const armor = playerDef() + 1; // parade légère
+    const armor = playerDef() + 1;
     if(r>=armor){ const dmg=Math.max(0,rng.between(1,3+e.tier)-2); write(`Parade partielle, -${dmg} PV.`,"warn"); damage(dmg,e.name); }
     else write("Tu pares complètement !","good");
     combatTurn();
   });
 
-  // Compétences (toutes connues)
   addChoice(`Compétence (${state.skill.name||'—'})`, ()=>{
     if(!state.skill || !state.skill.use){ write("Pas de compétence de base.","warn"); return combatTurn(); }
     if(state.skill.cd>0){ write("Compétence en recharge.","warn"); return combatTurn(); }
@@ -368,7 +356,6 @@ function combatTurn(){
     if(e.hp>0) enemyAttack(); combatTurn();
   });
 
-  // Compétences apprises (menu)
   if(state.skills && state.skills.length>0){
     addChoice("Autres compétences…", ()=> skillsMenu(), false);
   }
@@ -409,7 +396,6 @@ function enemyAttack(){
     }
   } else write(`${e.name} rate son attaque.`,"info");
   tickStatus();
-  // déc. des buffs durables
   state.buffs = state.buffs.filter(b=>{ b.dur--; return b.dur>0; });
 }
 function afterCombat(){
@@ -417,7 +403,6 @@ function afterCombat(){
   const gold=rng.between(e.tier, e.tier*3); const xp=rng.between(e.tier*3, e.tier*6);
   changeGold(gold); gainXP(xp);
 
-  // Loots variés
   const r=rng.rand();
   if(r<0.18 && !hasItem("Épée affûtée")) addItem("Épée affûtée",{mods:{ATK:+1}, price:5});
   else if(r<0.32 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois",{mods:{DEF:+1}, price:4});
@@ -580,7 +565,6 @@ function villageHub(){
 
   addChoice("Quitter le village", ()=>{ write("Tu quittes le brouhaha pour la nature."); singleContinue(()=>gotoZone('clairiere')); });
 }
-
 function eventVillageMarket(){
   addScene('zone_village'); write("🛒 Étals variés : potions, rations et bric-à-brac."); clearChoices();
   shopStock.market.forEach((it,i)=> addChoice(`Acheter ${it.name} (${it.price} or)`, ()=>buyItem(it, villageHub), i===0));
@@ -604,7 +588,6 @@ function eventVillageForge(){
   addChoice("Parler métier", ()=>{ gainXP(3); write("« Le Nord bruisse de rumeurs sur un Chef Bandit… »","info"); singleContinue(villageHub); });
   addChoice("Quitter la forge", ()=>singleContinue(villageHub));
 }
-
 // Quêtes réputation
 function questHelpGuard(){
   addScene('guard'); write("🛡️ La Garde te confie une patrouille près des ruines."); clearChoices();
@@ -636,10 +619,9 @@ function chest(){
   else { write("💥 Piège !","bad"); damage(rng.between(3,6),"Piège"); }
 }
 function searchArea(){
-  const {total} = d20(Math.floor(state.derived.ESP/3)); // l’ESP aide un peu à fouiller
+  const {total} = d20(Math.floor(state.derived.ESP/3));
   if(total>=18){ write("🔑 Coffre scellé trouvé !","good"); chest(); singleContinue(); return; }
   if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); singleContinue(); return; }
-  // Approche garantie :
   write("…Tu repères des traces fraîches. Quelque chose s’approche !");
   forcedEncounter();
 }
@@ -896,10 +878,10 @@ function chooseClass(){
 }
 
 // ———————————————————————————————————————————————————————————
-// 16) État initial & boot
+// 16) État initial & boot (corrigé : force le choix de classe au start)
 // ———————————————————————————————————————————————————————————
 function initialState(){
-  const baseHP = 20; // base avant VIT
+  const baseHP = 20;
   const start = {
     name:"Eldarion", cls:"—",
     attrs:{FOR:1,AGI:1,ESP:1,VIT:1},
@@ -948,7 +930,11 @@ function setup(isNew=false){
   clearChoices();
   const classesValides = ['Guerrier','Voleur','Paladin','Rôdeur','Mystique'];
   const needsClass = !state.cls || state.cls === '—' || !classesValides.includes(state.cls);
-  if (isNew || ui.log.childElementCount===0 || needsClass){ write("v10++ — Démarrage. Choisis ta classe.","sys"); chooseClass(); return; }
+  if (isNew || ui.log.childElementCount===0 || needsClass){
+    write("v10++ — Démarrage. Choisis ta classe.","sys");
+    chooseClass(); 
+    return;
+  }
   explore(true);
 }
 function startAdventure(){ ui.log.innerHTML=""; refreshDerived(); setStats(); write("L'aventure commence !","info"); explore(true); }
@@ -972,3 +958,15 @@ if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator
 
 // Boot DOM-safe
 (function boot(){ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ()=>setup(true), { once:true }); else setup(true); })();
+
+// ———————————————————————————————————————————————————————————
+// 17) Effets d’état périodiques
+// ———————————————————————————————————————————————————————————
+function tickStatus(){
+  state.status = state.status.filter(st=>{
+    if(st.type==='poison'){ const dmg=rng.between(1,2); damage(dmg,"Poison"); st.dur--; }
+    if(st.type==='bleed'){ const dmg=2; damage(dmg,"Saignement"); st.dur--; }
+    if(st.type==='slow'){ st.dur--; if(st.dur===0) write('💨 Tu te sens plus léger.','info') }
+    return st.dur>0 && state.hp>0;
+  });
+}
