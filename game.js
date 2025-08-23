@@ -1,23 +1,23 @@
-// === Aventurier de Mirval — game.js (v10 — forgeron FIX + choix/scénario enrichis, visuels SVG, no-save) ===
-console.log("Mirval v10 — game.js chargé");
+// === Aventurier de Mirval — game.js (v10 COMPLET, corrigé & enrichi) ===
+console.log("game.js v10 chargé");
 
-// ---------- Wake Lock (mobile) ----------
+// Garder l’écran éveillé (utile sur mobile)
 let wakeLock;
-async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
 if('wakeLock' in navigator) keepAwake();
 
-// ---------- RNG ----------
+// === RNG avec graine (xorshift) ===
 const rng = (() => {
   const seed = (crypto.getRandomValues?crypto.getRandomValues(new Uint32Array(1))[0]^Date.now():Date.now())>>>0;
   let s = seed>>>0;
   function rand(){ s ^= s<<13; s>>>=0; s ^= s>>17; s>>>=0; s ^= s<<5; s>>>=0; return (s>>>0)/0xFFFFFFFF; }
   function between(min,max){ return Math.floor(rand()*(max-min+1))+min; }
-  return { rand, between, seed };
+  return {rand, between, seed};
 })();
-const seedEl = document.getElementById('seedInfo'); if(seedEl) seedEl.textContent = `seed ${rng.seed}`;
+document.getElementById('seedInfo').textContent = `seed ${rng.seed}`;
 
-// ---------- UI refs ----------
+// === Références UI ===
 const ui = {
   log: document.getElementById('log'),
   choices: document.getElementById('choices'),
@@ -39,51 +39,53 @@ const ui = {
   awis: document.getElementById('a-wis'),
   rep: document.getElementById('rep'),
   repLabel: document.getElementById('rep-label'),
-  quests: document.getElementById('quests')
+  quests: document.getElementById('quests'),
 };
 
-// ---------- Styles (scènes SVG + sécurité) ----------
-(function ensureSceneStyles(){
-  if(document.getElementById('mirval-scene-style')) return;
-  const st=document.createElement('style'); st.id='mirval-scene-style';
-  st.textContent = `
-  .scene { margin:12px 0; text-align:center; }
-  .scene svg { max-width:340px; height:auto; display:block; margin:10px auto;
-               filter: drop-shadow(0 0 6px rgba(0,0,0,.6)); animation: sceneFade .45s ease both; }
-  @keyframes sceneFade { from {opacity:0; transform: translateY(4px)} to {opacity:1; transform: none} }
-  .choices button[disabled]{opacity:.6; cursor:not-allowed}
-  `;
-  document.head.appendChild(st);
-})();
+// === Visuels SVG (aucun asset externe requis) ===
+function addScene(key){
+  const div = document.createElement("div");
+  div.className = "scene";
+  div.innerHTML = scenes[key] || scenes["default"];
+  ui.log.appendChild(div);
+  ui.log.scrollTop = ui.log.scrollHeight;
+}
+const scenes = {
+  bandit:`<svg width="260" height="160"><rect width="260" height="160" fill="#251515"/><circle cx="130" cy="80" r="40" fill="#444"/><text x="130" y="86" font-size="20" text-anchor="middle" fill="#fff">Bandit</text></svg>`,
+  loup:`<svg width="260" height="160"><rect width="260" height="160" fill="#152515"/><circle cx="130" cy="80" r="40" fill="#333"/><text x="130" y="86" font-size="20" text-anchor="middle" fill="#fff">Loup</text></svg>`,
+  harpy:`<svg width="260" height="160"><rect width="260" height="160" fill="#14202d"/><circle cx="130" cy="80" r="40" fill="#37506b"/><text x="130" y="86" font-size="20" text-anchor="middle" fill="#fff">Harpie</text></svg>`,
+  ghoul:`<svg width="260" height="160"><rect width="260" height="160" fill="#102018"/><circle cx="130" cy="80" r="40" fill="#2e6b4e"/><text x="130" y="86" font-size="20" text-anchor="middle" fill="#fff">Goule</text></svg>`,
+  boar:`<svg width="260" height="160"><rect width="260" height="160" fill="#2a2016"/><circle cx="130" cy="80" r="40" fill="#6b4c2e"/><text x="130" y="86" font-size="20" text-anchor="middle" fill="#fff">Sanglier</text></svg>`,
+  sanctuaire:`<svg width="260" height="160"><rect width="260" height="160" fill="#1c1c2b"/><rect x="90" y="40" width="80" height="80" fill="#6b6b90"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Sanctuaire</text></svg>`,
+  forgeron:`<svg width="260" height="160"><rect width="260" height="160" fill="#2b1d0d"/><rect x="80" y="60" width="100" height="50" fill="#555"/><text x="130" y="90" font-size="18" text-anchor="middle" fill="#fff">Forgeron</text></svg>`,
+  barde:`<svg width="260" height="160"><rect width="260" height="160" fill="#1b2130"/><circle cx="130" cy="80" r="32" fill="#5a6b8a"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Barde</text></svg>`,
+  herbalist:`<svg width="260" height="160"><rect width="260" height="160" fill="#15261a"/><circle cx="130" cy="80" r="32" fill="#3f6b4c"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Herboriste</text></svg>`,
+  hermit:`<svg width="260" height="160"><rect width="260" height="160" fill="#2a2a2a"/><circle cx="130" cy="80" r="32" fill="#6b6b6b"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Ermite</text></svg>`,
+  peasant:`<svg width="260" height="160"><rect width="260" height="160" fill="#303018"/><circle cx="130" cy="80" r="32" fill="#9a8b52"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Paysan</text></svg>`,
+  ruins:`<svg width="260" height="160"><rect width="260" height="160" fill="#1c1d22"/><rect x="70" y="50" width="120" height="60" fill="#444"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Ruines</text></svg>`,
+  grotte:`<svg width="260" height="160"><rect width="260" height="160" fill="#0d0d10"/><circle cx="130" cy="80" r="32" fill="#222"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Grotte</text></svg>`,
+  boss:`<svg width="260" height="160"><rect width="260" height="160" fill="#3b1111"/><circle cx="130" cy="80" r="40" fill="#7a2e2e"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">Chef Bandit</text></svg>`,
+  default:`<svg width="260" height="160"><rect width="260" height="160" fill="#111"/><text x="130" y="86" font-size="18" text-anchor="middle" fill="#fff">…</text></svg>`
+};
 
-// ---------- Outils UI / anti-spam ----------
-let _eventLocked = false;        // empêche double-clic sur une option
-let _continueActive = false;     // garantit 1 seul bouton "Continuer"
-
-function write(html, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=html; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
-function clearChoices(){ ui.choices.innerHTML=""; _continueActive=false; _eventLocked=false; }
-function disableAllChoices(){ ui.choices.querySelectorAll('button').forEach(b=>b.disabled=true); }
+// === Utilitaires UI ===
+function write(text, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=text; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
+function clearChoices(){ ui.choices.innerHTML=""; _eventLocked=false; }
+let _eventLocked=false;
 function addChoice(label, handler, primary=false){
-  const btn=document.createElement('button'); if(primary) btn.classList.add('btn-primary'); btn.textContent=label;
-  btn.addEventListener('click', ()=>{
-    if(btn.disabled||_eventLocked) return;
-    _eventLocked=true; disableAllChoices();
-    try{ handler(); }catch(e){ console.error(e); write("Erreur : "+e.message,"bad"); continueBtn(()=>explore()); }
-  }, { once:true });
+  if(_eventLocked) return;
+  const btn=document.createElement('button');
+  if(primary) btn.classList.add('btn-primary');
+  btn.textContent = label;
+  btn.onclick = ()=>{ if(_eventLocked) return; _eventLocked=true; handler(); };
   ui.choices.appendChild(btn);
 }
-function continueBtn(next=()=>explore()){
-  if(_continueActive) return; _continueActive=true;
-  const btn=document.createElement('button'); btn.classList.add('btn-primary'); btn.textContent="Continuer";
-  btn.addEventListener('click', ()=>{ if(btn.disabled) return; disableAllChoices(); next(); }, { once:true });
-  ui.choices.appendChild(btn);
-}
-function addScene(key, variant=null){
-  const wrap=document.createElement('div'); wrap.className='scene'; wrap.innerHTML = svgScene(key, variant);
-  ui.log.appendChild(wrap); ui.log.scrollTop=ui.log.scrollHeight;
+function singleContinue(next=()=>explore()){
+  clearChoices();
+  addChoice("Continuer", ()=>next(), true);
 }
 
-// ---------- Stats & helpers ----------
+// === Stats & affichage ===
 function setStats(){
   ui.hp.textContent = state.hp; ui.hpmax.textContent=state.hpMax;
   ui.hpbar.style.width = Math.max(0,Math.min(100,Math.round(state.hp/state.hpMax*100)))+'%';
@@ -92,162 +94,75 @@ function setStats(){
   ui.pclass.textContent = state.cls; ui.pname.textContent = state.name;
   ui.astr.textContent = state.attrs.STR; ui.aagi.textContent = state.attrs.AGI; ui.awis.textContent = state.attrs.WIS;
   ui.rep.textContent = state.rep; ui.repLabel.textContent = repText(state.rep);
-
-  // Inventaire
   ui.inv.innerHTML="";
   state.inventory.forEach(it=>{
-    const d=document.createElement('div'); d.className='stat item-'+(it.rarity||'common');
-    d.innerHTML = `<b><span class="emoji">${it.emoji||'✨'}</span> ${it.name}</b><span>${it.desc}</span>`;
+    const d=document.createElement('div'); d.className='stat';
+    d.innerHTML = `<b>${it.name}</b><span>${it.desc}</span>`;
     ui.inv.appendChild(d);
   });
-
-  // Quêtes
   ui.quests.innerHTML='';
-  const mq=document.createElement('div'); mq.className='stat'; mq.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state}</span>`; ui.quests.appendChild(mq);
-  const aq=document.createElement('div'); aq.className='stat'; aq.innerHTML=`<b>Fragments d’artefact (${state.flags.fragments}/3)</b><span>${state.quests.artifacts.state}</span>`; ui.quests.appendChild(aq);
-  state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
+  const mq=document.createElement('div'); mq.className='stat';
+  mq.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state}</span>`;
+  ui.quests.appendChild(mq);
+  const aq=document.createElement('div'); aq.className='stat';
+  aq.innerHTML=`<b>Fragments d’artefact (${state.flags.fragments}/3)</b><span>${state.quests.artifacts.state}</span>`;
+  ui.quests.appendChild(aq);
+  state.quests.side.forEach(q=>{
+    const x=document.createElement('div'); x.className='stat';
+    x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`;
+    ui.quests.appendChild(x);
+  });
 }
+
+// === Helpers ===
 function d20(mod=0){ const roll=rng.between(1,20); const total=roll+mod; ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${roll} = ${total}`; return {roll,total}; }
 function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,"good"); }
 function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,"bad"); if(state.hp<=0){ gameOver(); return true; } return false; }
 function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n} (total: ${state.gold})`, n>=0?"good":"warn"); }
 function gainXP(n){ state.xp+=n; write(`XP +${n} (total ${state.xp})`,"info"); const need=20+(state.level-1)*15; if(state.xp>=need){ state.level++; state.xp=0; state.hpMax+=5; state.hp=state.hpMax; write(`<b>Niveau ${state.level} !</b> PV max +5, PV restaurés.`,"good"); } setStats(); }
-function addItem(name,desc,emoji="✨",rarity="common"){ state.inventory.push({name,desc,emoji,rarity}); setStats(); write(`Tu obtiens <b>${name}</b>.`,"good"); }
+function addItem(name,desc){ if(!hasItem(name)){ state.inventory.push({name,desc}); setStats(); write(`Tu obtiens <b>${name}</b>.`,"good"); } }
 function hasItem(name){ return state.inventory.some(i=>i.name===name); }
 function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
-function hasStatus(type){ return state.status.some(s=>s.type===type); }
-function repText(n){return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'}
-function rep(n){ state.rep += n; setStats(); }
+function repText(n){ return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'; }
 
-// ---------- SVG scenes ----------
-function svgScene(kind, variant=null){
-  const defs = `
-  <defs>
-    <linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${variant==='night'?'#0b1020':'#0f172a'}"/>
-      <stop offset="1" stop-color="${variant==='night'?'#060914':'#0b1220'}"/>
-    </linearGradient>
-    <filter id="soft"><feGaussianBlur stdDeviation="1.4"/></filter>
-  </defs>`;
-  const label = (txt) => `<text x="24" y="30" font-size="16" fill="#cbd5e1">${txt}</text>`;
-  if(kind==='class'){
-    return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-      <rect width="640" height="230" fill="url(#bg1)"/>${label("Choisis ta classe")}
-      ${[['🛡️','Guerrier',80],['🗡️','Voleur',220],['⚕️','Paladin',360],['🏹','Rôdeur',500],['🔮','Mystique',560]].map(([e,t,x])=>`
-        <g transform="translate(${x-40},80)">
-          <circle cx="40" cy="40" r="36" fill="#0ea5e9" opacity=".18"/>
-          <text x="40" y="45" text-anchor="middle" font-size="22" fill="#e5e7eb">${e}</text>
-          <text x="40" y="86" text-anchor="middle" font-size="12" fill="#9ca3af">${t}</text>
-        </g>`).join('')}
-    </svg>`;
-  }
-  if(kind==='forest'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="url(#bg1)"/>${label("Forêt de Mirval")}
-    <rect y="170" width="640" height="60" fill="#20412c"/>
-    <g fill="#0f172a" opacity=".5">${[10,70,140,520,590].map((x)=>`
-      <rect x="${x}" y="110" width="46" height="90"/><polygon points="${x},110 ${x+23},70 ${x+46},110"/>`).join('')}</g></svg>`; }
-  if(kind==='marais'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="${variant==='night'?'#07141a':'#0c1d1f'}"/>${label("Marais de Vire-Saule")}
-    <ellipse cx="320" cy="185" rx="290" ry="45" fill="#0f3a3a" opacity=".65"/>
-    <g filter="url(#soft)"><circle cx="120" cy="110" r="8" fill="#34d399"/><circle cx="160" cy="130" r="5" fill="#34d399"/><circle cx="540" cy="120" r="7" fill="#34d399"/></g></svg>`; }
-  if(kind==='clearing'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#102116"/><rect y="170" width="640" height="60" fill="#225b34"/>
-    ${label("Clairière des Lys")}<circle cx="520" cy="60" r="24" fill="#fde68a" ${variant==='night'?'opacity=".15"':''}/></svg>`; }
-  if(kind==='hill'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#111827"/><path d="M0,180 Q160,110 320,180 T640,180 L640,230 L0,230 Z" fill="#1f2937"/>
-    ${label("Colline de Rocfauve")}</svg>`; }
-  if(kind==='ruins'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#0f1420"/><rect x="60" y="170" width="120" height="20" fill="#374151"/>
-    <rect x="110" y="120" width="60" height="50" fill="#4b5563"/><rect x="108" y="112" width="64" height="8" fill="#6b7280"/>
-    ${label("Ruines oubliées")}</svg>`; }
-  if(kind==='cave'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#0b0f1a"/><ellipse cx="320" cy="170" rx="320" ry="70" fill="#111827"/>
-    <path d="M280,180 Q320,90 360,180 Z" fill="#0f172a"/>${label("Grotte sépulcrale")}</svg>`; }
-  if(kind==='sanctuary'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#0d1320"/><rect x="80" y="160" width="120" height="16" fill="#334155"/>
-    <polygon points="80,160 140,120 200,160" fill="#3b82f6"/><rect x="128" y="140" width="24" height="20" fill="#e5e7eb"/>
-    ${label("Ancien sanctuaire")}</svg>`; }
-  if(kind==='herbalist'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="url(#bg1)"/><circle cx="120" cy="110" r="32" fill="#14532d"/>
-    <text x="120" y="118" text-anchor="middle" font-size="20" fill="#d1fae5">🌿</text>${label("Herboriste")}</svg>`; }
-  if(kind==='smith'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#1f2937"/><rect x="80" y="170" width="120" height="18" fill="#374151"/>
-    <circle cx="140" cy="140" r="24" fill="#6b7280"/>${label("Forgeron itinérant")}</svg>`; }
-  if(kind==='bard'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#0d1320"/><path d="M60,130 q40,-60 80,0 t80,0 t80,0" stroke="#60a5fa" stroke-width="3" fill="none"/>
-    ${label("Barde mélodieux")}</svg>`; }
-  if(kind==='hermit'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#111827"/><circle cx="520" cy="120" r="26" fill="#374151"/>
-    <text x="520" y="128" text-anchor="middle" font-size="20" fill="#e5e7eb">🧙</text>${label("Ermite")}</svg>`; }
-  if(kind==='peasant'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
-    <rect width="640" height="230" fill="#132318"/><rect x="90" y="160" width="80" height="8" fill="#a16207"/>
-    <circle cx="130" cy="140" r="12" fill="#9ca3af"/><rect x="122" y="150" width="16" height="22" fill="#9ca3af"/>
-    ${label("Paysan captif")}</svg>`; }
-  if(kind==='caravan'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0f172a"/><rect x="80" y="150" width="140" height="40" rx="8" fill="#374151"/>
-    <circle cx="110" cy="196" r="10" fill="#111827"/><circle cx="190" cy="196" r="10" fill="#111827"/>
-    ${label("Caravane marchande")}</svg>`; }
-  if(kind==='gate'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b0f1a"/><rect x="260" y="80" width="120" height="120" fill="#1f2937"/>
-    <path d="M260,80 L320,50 L380,80 Z" fill="#374151"/><text x="320" y="145" text-anchor="middle" font-size="14" fill="#e5e7eb">⚷</text>
-    ${label("Porte ancienne")}</svg>`; }
-  if(kind==='camp'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0f172a"/><path d="M120,180 L160,120 L200,180 Z" fill="#6b7280"/><circle cx="240" cy="170" r="10" fill="#f59e0b"/>
-    ${label("Campement")}</svg>`; }
-  if(kind==='bridge'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1220"/><rect x="80" y="150" width="480" height="10" fill="#6b7280"/>
-    <path d="M80,160 Q160,120 240,160 T400,160 T560,160" stroke="#374151" stroke-width="3" fill="none"/>
-    ${label("Vieux pont")}</svg>`; }
-  if(kind==='wishing'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b0f1a"/><circle cx="520" cy="120" r="20" fill="#1f2937"/><text x="520" y="128" text-anchor="middle" font-size="16" fill="#93c5fd">⭐</text>
-    ${label("Pierre de vœux")}</svg>`; }
-  if(kind==='bog'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1a1a"/><ellipse cx="320" cy="170" rx="300" ry="60" fill="#153737"/>
-    ${label("Tourbière")}</svg>`; }
-  if(kind==='bandit'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1320"/><circle cx="500" cy="110" r="36" fill="#1f2937"/>
-    <rect x="468" y="140" width="64" height="60" rx="8" fill="#1f2937"/><rect x="472" y="102" width="56" height="16" fill="#0ea5e9" opacity=".5"/>
-    <text x="500" y="118" text-anchor="middle" font-size="20" fill="#e5e7eb">😈</text>${label("Bandit embusqué")}</svg>`; }
-  if(kind==='wolf'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1220"/><path d="M420,170 l-40,-30 20,0 -10,-20 30,10 20,-10 10,20 20,0 -40,30 z" fill="#6b7280"/>
-    ${label("Loup affamé")}</svg>`; }
-  if(kind==='boar'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1220"/><ellipse cx="500" cy="150" rx="40" ry="22" fill="#7c3f27"/><circle cx="475" cy="150" r="14" fill="#7c3f27"/>
-    ${label("Sanglier irascible")}</svg>`; }
-  if(kind==='harpy'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1220"/><path d="M470,120 q-40,-40 -80,0 q40,30 80,0" stroke="#a78bfa" stroke-width="4" fill="none"/>
-    ${label("Harpie du vent")}</svg>`; }
-  if(kind==='ghoul'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b1220"/><rect x="480" y="110" width="36" height="60" rx="6" fill="#065f46"/><circle cx="498" cy="100" r="16" fill="#065f46"/>
-    ${label("Goule des roseaux")}</svg>`; }
-  if(kind==='boss'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#1b1b28"/><circle cx="500" cy="110" r="36" fill="#7f1d1d"/>
-    <text x="500" y="118" text-anchor="middle" font-size="22" fill="#fde68a">👑</text>${label("Chef Bandit")}</svg>`; }
-  if(kind==='trap'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#111827"/><path d="M40,180 h560" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"/>
-    ${label("Piège tendu")}</svg>`; }
-  if(kind==='oracle'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
-    <rect width="640" height="230" fill="#0b0f1a"/><circle cx="520" cy="110" r="26" fill="#1e293b"/>
-    <text x="520" y="118" text-anchor="middle" font-size="18" fill="#93c5fd">🔮</text>${label("Rêve prophétique")}</svg>`; }
-  return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg"><rect width="640" height="230" fill="#0f172a"/><text x="320" y="120" text-anchor="middle" font-size="16" fill="#93c5fd">Mirval</text></svg>`;
+// === Statuts (poison/saignement/slow) ===
+function tickStatus(){
+  state.status = state.status.filter(st=>{
+    if(st.type==='poison'){ const dmg=rng.between(1,2); damage(dmg,"Poison"); st.dur--; }
+    if(st.type==='bleed'){ const dmg=2; damage(dmg,"Saignement"); st.dur--; }
+    if(st.type==='slow'){ st.dur--; if(st.dur===0) write('💨 Tu te sens plus léger.','info') }
+    return st.dur>0 && state.hp>0;
+  });
 }
+function rep(n){ state.rep+=n; setStats(); }
 
-// ---------- Combat ----------
-function playerAtkMod(){ let m=0; if(state.cls==='Guerrier') m+=2; if(state.attrs.STR>=3) m+=1; if(hasItem('Épée affûtée')) m+=1; if(hasItem('Lame runique')) m+=1; return m; }
+// === Combat ===
+function playerAtkMod(){
+  let m=0;
+  if(state.cls==='Guerrier') m+=2;
+  if(state.attrs.STR>=3) m+=1;
+  if(hasItem('Épée affûtée')) m+=1;
+  return m;
+}
 function playerDef(){
-  let base = 10 + (state.cls==='Paladin'?1:0) + (state.attrs.AGI>=3?1:0)
-    + (hasItem('Petite armure')?1:0) + (hasItem('Cuir renforcé')?2:0) + (hasItem('Bouclier en fer')?2:0);
-  if(hasStatus('guard')) base += 1;
-  return base;
+  return 10
+    + (state.cls==='Paladin'?1:0)
+    + (state.attrs.AGI>=3?1:0)
+    + (hasItem('Petite armure')?1:0)
+    + (hasItem('Cuir renforcé')?2:0)
+    + (hasItem('Bouclier en fer')?2:0);
 }
 function terrainPenalty(){ return state.locationKey==='marais' ? -1 : 0 }
 
 function combat(mon){
-  clearChoices(); state.inCombat=true; state.enemy=JSON.parse(JSON.stringify(mon));
-  addScene(mon.scene||'bandit', (state.time==='Nuit'||state.time==='Crépuscule')?'night':null);
+  clearChoices();
+  state.inCombat=true;
+  state.enemy=JSON.parse(JSON.stringify(mon));
+  addScene(mon.scene || 'default');
   write(`<b>${mon.name}</b> apparaît ! ❤️ ${mon.hp} — CA ${mon.ac}`,"warn");
   combatTurn();
 }
+
 function combatTurn(){
   if(!state.inCombat) return;
   if(state.hp<=0){ gameOver(); return; }
@@ -256,57 +171,75 @@ function combatTurn(){
   clearChoices();
   const e=state.enemy;
 
-  addChoice(`⚔️ Attaquer`, ()=>aimMenu(), true);
-  addChoice(`🛡️ Parer`, ()=>{
+  addChoice(`Attaquer`, ()=> aimMenu(), true);
+
+  addChoice(`Parer`, ()=>{
     const bonus = state.cls==='Rôdeur'?2:1;
     const m = d20(e.hitMod).total;
-    const armor = 12 + bonus + (hasItem("Petite armure")?1:0) + (hasItem("Cuir renforcé")?2:0) + (hasItem("Bouclier en fer")?2:0);
-    if(m>=armor){ const dmg=Math.max(0,rng.between(1,3+e.tier)-2-bonus); write(`Parade partielle, -${dmg} PV.`,"warn"); damage(dmg,e.name); }
-    else write("Tu pares complètement !","good");
+    const armor = playerDef() + bonus;
+    if(m>=armor){
+      const dmg=Math.max(0,rng.between(1,3+e.tier)-2-bonus);
+      write(`Parade partielle, -${dmg} PV.`,"warn");
+      damage(dmg,e.name);
+    } else write("Tu pares complètement !","good");
     combatTurn();
   });
-  addChoice(`✨ Compétence${state.skill.cd?` (${state.skill.cd})`:''}`, ()=>{
-    if(state.skill.cd){ write("Compétence en recharge.","warn"); return combatTurn(); }
-    state.skill.use(e); state.skill.cd = state.skill.cooldown;
-    if(e.hp>0) enemyAttack(); combatTurn();
+
+  addChoice(`Compétence (${state.skill.name||'—'})`, ()=>{
+    if(!state.skill || !state.skill.use){ write("Pas de compétence.","warn"); return combatTurn(); }
+    if(state.skill.cd>0){ write("Compétence en recharge.","warn"); return combatTurn(); }
+    state.skill.use(e);
+    state.skill.cd = state.skill.cooldown||3;
+    if(e.hp>0) enemyAttack();
+    combatTurn();
   });
-  addChoice(`🧪 Potion (${state.potions})`, ()=>{
+
+  addChoice(`Potion (${state.potions})`, ()=>{
     if(state.potions<=0){ write("Plus de potions.","warn"); return combatTurn(); }
-    state.potions--; heal(rng.between(8,12)); enemyAttack(); combatTurn();
+    state.potions--; heal(rng.between(8,12));
+    enemyAttack(); combatTurn();
   });
-  addChoice(`🏃 Fuir`, ()=>{
+
+  addChoice(`Fuir`, ()=>{
     const r=d20(state.attrs.AGI>=3?2:0).total;
     if(r>=14){ write("Tu fuis le combat.","sys"); state.inCombat=false; state.enemy=null; explore(); }
     else { write("Échec de fuite !","bad"); enemyAttack(); combatTurn(); }
   });
 }
+
 function aimMenu(){
   clearChoices(); const e=state.enemy;
-  addChoice('🎯 Viser la tête', ()=>{
+  addChoice('Viser la tête', ()=>{
     const r=d20(playerAtkMod()-2 + terrainPenalty()).total;
-    if(r>=e.ac+2){ let dmg=rng.between(6,10); if(hasItem('Lame runique') && e.name.includes('Bandit')) dmg+=1; e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); }
+    if(r>=e.ac+2){ const dmg=rng.between(6,10); e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); }
     else write('Tu manques la tête.','warn');
     enemyAttack(); combatTurn();
   }, true);
-  addChoice('🗡️ Viser le torse', ()=>{
+
+  addChoice('Viser le torse', ()=>{
     const r=d20(playerAtkMod() + terrainPenalty()).total;
-    if(r>=e.ac){ let dmg=rng.between(3,7); if(hasItem('Lame runique') && e.name.includes('Bandit')) dmg+=1; e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); }
+    if(r>=e.ac){ const dmg=rng.between(3,7); e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); }
     else write('Tu manques.','warn');
     enemyAttack(); combatTurn();
   });
-  addChoice('🦵 Viser les jambes', ()=>{
+
+  addChoice('Viser les jambes', ()=>{
     const r=d20(playerAtkMod()+1 + terrainPenalty()).total;
     if(r>=e.ac-1){ const dmg=rng.between(2,5); e.hp-=dmg; state.status.push({type:'slow',name:'Ralentissement',dur:2}); write(`🦵 Frappe aux jambes : -${dmg} PV (ennemi ralenti)`,'good'); }
     else write('Tu manques les jambes.','warn');
     enemyAttack(); combatTurn();
   });
-  addChoice('↩️ Annuler', combatTurn);
+
+  addChoice('Annuler', combatTurn);
 }
+
 function enemyAttack(){
-  const e=state.enemy; const roll = d20(e.hitMod).total; const def = playerDef() + terrainPenalty();
+  const e=state.enemy;
+  const roll = d20(e.hitMod).total;
+  const def = playerDef() + terrainPenalty();
   if(roll>=def){
     const dmg=rng.between(1,3+e.tier);
-    if(e.name.includes('Bandit') && rng.rand()<0.2){ changeGold(-1); write('🪙 Le bandit te détrousse !','warn'); }
+    if(e.name==='Bandit des fourrés' && rng.rand()<0.2){ changeGold(-1); write('🪙 Le bandit te détrousse !','warn'); }
     damage(dmg,e.name);
     if(e.dotChance && rng.rand()<e.dotChance){
       if(e.dotType==='poison') state.status.push({type:'poison', name:'Poison', dur:rng.between(2,4)});
@@ -316,520 +249,63 @@ function enemyAttack(){
   } else write(`${e.name} rate son attaque.`,"info");
   tickStatus();
 }
-function tickStatus(){
-  state.status = state.status.filter(st=>{
-    if(st.type==='poison'){ const dmg=rng.between(1,2); damage(dmg,"Poison"); st.dur--; }
-    if(st.type==='bleed'){ const dmg=2; damage(dmg,"Saignement"); st.dur--; }
-    if(st.type==='slow'){ st.dur--; if(st.dur===0) write('💨 Tu te sens plus léger.','info') }
-    if(st.type==='guard'){ st.dur--; if(st.dur===0) write('🛡️ Ta garde revient à la normale.','info'); }
-    return st.dur>0 && state.hp>0;
-  });
-}
+
 function afterCombat(){
   const e=state.enemy; state.inCombat=false; state.enemy=null;
   const gold=rng.between(e.tier, e.tier*3); const xp=rng.between(e.tier*3, e.tier*6);
   changeGold(gold); gainXP(xp);
   const r=rng.rand();
-  if(r<0.2 && !hasItem("Épée affûtée")) addItem("Épée affûtée","+1 attaque","🗡️","rare");
-  else if(r<0.35 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois","+1 armure légère","🛡️","common");
+  if(r<0.2 && !hasItem("Épée affûtée")) addItem("Épée affûtée","+1 attaque");
+  else if(r<0.35 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois","+1 armure légère");
   else if(r<0.45) { state.potions++; write("Tu trouves une potion.","good"); }
-  else if(r<0.5 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple","🧥","rare");
-  if(e.name.includes("Harpie") && rng.rand()<0.10){ state.flags.fragments++; write("🧩 Un éclat chute des serres !","good"); }
+  else if(r<0.5 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple");
+
+  // Rumeurs → chef bandit
   if(e.name.includes("Bandit")){
     state.flags.rumors = (state.flags.rumors||0)+1;
-    if(state.flags.rumors>=3 && !state.flags.bossUnlocked){ state.flags.bossUnlocked=true; write("🗡️ Tu apprends la cache du Chef Bandit…","info"); }
+    if(state.flags.rumors>=3 && !state.flags.bossUnlocked){
+      state.flags.bossUnlocked=true;
+      write("🗡️ Tu apprends la cache du Chef Bandit… (événement rare débloqué)","info");
+    }
+  }
+
+  // Fragments : légère chance selon zone et monstre
+  let dropChance = 0;
+  if(e.name.includes('Harpie')) dropChance = 0.08;
+  if(e.name.includes('Goule')) dropChance = 0.10;
+  if(e.name.includes('Bandit')) dropChance += 0.05;
+  if(state.locationKey==='ruines') dropChance += 0.05;
+  if(state.locationKey==='grotte') dropChance += 0.07;
+
+  if(state.flags.fragments<3 && rng.rand()<dropChance){
+    state.flags.fragments++;
+    write(`✨ Fragment d’artefact trouvé ! (${state.flags.fragments}/3)`,"good");
+    if(state.flags.fragments>=3){
+      state.quests.artifacts.state='Complet';
+      write("Les fragments vibrent… une porte oubliée s’ouvrira peut-être dans les Ruines.","info");
+      state.flags.ruinsUnlocked = true;
+    }
   }
   explore();
 }
 
-// ---------- Exploration ----------
-function setTime(){
-  const slots=["Aube","Matin","Midi","Après-midi","Crépuscule","Nuit"];
-  const idx=slots.indexOf(state.time); let n=(idx+1)%slots.length; if(n===0) state.day++;
-  state.time=slots[n]; ui.day.textContent=`Jour ${state.day} — ${state.time}`;
-}
-function gotoZone(key){
-  state.locationKey=key;
-  state.location = key==='marais'?"Marais de Vire-Saule": key==='clairiere'?"Clairière des Lys": key==='colline'?"Colline de Rocfauve": key==='ruines'?"Ruines Oubliées": key==='grotte'?"Grotte Sépulcrale":"Lisière";
-  write(`👉 Tu te diriges vers ${state.location}.`,"sys");
-  addScene(key==='marais'?'marais': key==='clairiere'?'clearing': key==='colline'?'hill': key==='ruines'?'ruins': key==='grotte'?'cave':'forest', (state.time==='Nuit'||state.time==='Crépuscule')?'night':null);
-  explore(true);
-}
-function pickWeighted(items, k){
-  const recent = new Set(state.lastLabels);
-  let pool = items.flatMap(it => Array((it.w||1)).fill(it)).filter(it=> !recent.has(it.label));
-  if(pool.length<k) pool = items.flatMap(it => Array((it.w||1)).fill(it));
-  const out=[];
-  for(let i=0;i<k && pool.length;i++){ const idx=Math.floor(rng.rand()*pool.length); out.push(pool[idx]); pool=pool.filter((_,j)=>j!==idx); }
-  state.lastLabels = [...out.map(o=>o.label), ...state.lastLabels].slice(0,8);
-  return out;
-}
-function continueOnly(){ clearChoices(); continueBtn(()=>explore()); }
-
-function explore(initial=false){
-  setStats(); ui.loc.textContent = state.location; ui.day.textContent=`Jour ${state.day} — ${state.time}`; clearChoices();
-  if(!initial) setTime(); tickStatus(); if(state.hp<=0) return;
-
-  // Scénario : Porte ancienne si 3 fragments (aux ruines)
-  if(state.flags.fragments>=3 && !state.flags.doorDone && state.locationKey==='ruines'){ eventAncientDoor(); return; }
-  // Rêve unique
-  if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
-
-  const night = (state.time==='Nuit'||state.time==='Crépuscule');
-  const zone=state.locationKey;
-  const base=[
-    {label:"🔎 Fouiller", act:searchArea, w:2},
-    {label:"🛏️ Se reposer", act:rest, w:1},
-    {label:"🎒 Utiliser un objet", act:useItemMenu, w:1},
-    {label:"👀 Observer (repérage)", act:scout, w:1}
-  ];
-
-  let pool=[];
-  if(zone==='marais'){
-    pool.push({label:'✨ Feux-follets au loin', act:()=>{ addScene('marais', night?'night':null); eventSanctuary(); }, w:2});
-    pool.push({label:'🧑‍🌾 Captif à la berge', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); continueOnly(); } }, w:1});
-    pool.push({label:`🧟‍♂️ ${night?'Rôdeuse':'Goule'} des roseaux`, act:()=>combat(mobTemplates.ghoul()), w:3});
-    pool.push({label:'🐺 Meute furtive', act:()=>combat(mobTemplates.wolf()), w:2});
-    pool.push({label:'🪤 Une corde traîtresse', act:()=>{ addScene('trap'); eventTrap(); continueOnly(); }, w:1});
-    pool.push({label:'🪵 Vieil ouvrage submergé', act:()=>{ addScene('bog'); eventBog(); }, w:1});
-  } else if(zone==='clairiere'){
-    pool.push({label:'🌿 Herboriste (potions/torche)', act:()=>{ addScene('herbalist'); eventHerbalist(); }, w:2});
-    pool.push({label:'🎻 Barde (rumeurs)', act:()=>{ addScene('bard'); eventBard(); }, w:1});
-    pool.push({label:'🐗 Sanglier des fourrés', act:()=>combat(mobTemplates.boar()), w:2});
-    pool.push({label:'⛪ Autel moussu', act:()=>{ addScene('sanctuary'); eventSanctuary(); }, w:2});
-    pool.push({label:'🛒 Caravane marchande', act:()=>{ addScene('caravan'); eventCaravan(); }, w:1});
-    pool.push({label:'🥷 Bandits embusqués', act:()=>{ addScene('bandit'); combat(mobTemplates.bandit()); }, w:2});
-    pool.push({label:'⭐ Pierre de vœux', act:()=>{ addScene('wishing'); eventWishingStone(); }, w:1});
-  } else if(zone==='colline'){
-    pool.push({label:'🧙 Ermite (breloque)', act:()=>{ addScene('hermit'); eventHermit(); }, w:1});
-    pool.push({label:'🏚️ Ruines à explorer', act:()=>{ addScene('ruins'); eventRuins(); }, w:2});
-    pool.push({label:'🪶 Harpie des crêtes', act:()=>{ addScene('harpy'); combat(mobTemplates.harpy()); }, w:3});
-    pool.push({label:'⚒️ Forgeron itinérant', act:()=>{ addScene('smith'); eventSmith(); }, w:1});
-    pool.push({label:'🌉 Vieux pont', act:()=>{ addScene('bridge'); eventBridge(); }, w:1});
-  } else if(zone==='ruines'){
-    pool.push({label:'🔎 Décombres', act:()=>{ addScene('ruins'); eventRuins(); }, w:3});
-    pool.push({label:'⛰️ Éboulement', act:()=>{ addScene('ruins'); damage(rng.between(1,4),'Éboulement'); continueOnly(); }, w:1});
-    pool.push({label:'🥷 Bande de pilleurs', act:()=>{ addScene('bandit'); combat(mobTemplates.bandit()); }, w:2});
-  } else if(zone==='grotte'){
-    pool.push({label:'🧟‍♀️ Goule ancienne', act:()=>{ addScene('cave'); combat({name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison',scene:'ghoul'}) }, w:3});
-    pool.push({label:'📣 Échos inquiétants', act:()=>{ addScene('cave'); const r=d20().total; if(r<10) damage(3,'Stalactite'); else write('Rien ne se passe.'); continueOnly(); }, w:1});
-  }
-
-  if(state.flags.bossUnlocked) pool.push({label:"👑 Traquer le Chef Bandit", act:()=>combatBoss(), w:1});
-
-  const nav=[
-    {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
-    {label:'→ Clairière', act:()=>gotoZone('clairiere'), w:1},
-    {label:'→ Colline', act:()=>gotoZone('colline'), w:1},
-    {label:'→ Ruines', act:()=>gotoZone('ruines'), w: state.flags.ruinsUnlocked?1:0},
-    {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer.','warn'), addScene('cave'), continueOnly()), w:1}
-  ].filter(x=>x.w>0);
-
-  const dyn = pickWeighted(pool, 3 + (rng.rand()<0.4?1:0));
-  const all = pickWeighted([...base, ...dyn, ...nav], 4);
-  all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
-}
-
-// ---------- Actions générales ----------
-function scout(){
-  write("Tu observes les environs et marques des repères.", "info");
-  state.flags.scouted = true;
-  if(rng.rand()<0.4){ write("Tu repères une trace de coffre…", "info"); state.flags.scoutedChest = true; }
-  continueBtn(()=>explore());
-}
-function searchArea(){
-  addScene(state.locationKey==='marais'?'marais':state.locationKey==='ruines'?'ruins':state.locationKey==='grotte'?'cave':'forest',
-           (state.time==='Nuit'||state.time==='Crépuscule')?'night':null);
-  const bonus = (state.attrs.WIS>=3?1:0) + (state.flags.scouted?1:0);
-  const {total} = d20(bonus);
-  state.flags.scouted=false;
-  if(total>=19){ write("🔑 Tu trouves un coffre scellé et un recoin caché.","good"); chest(true); }
-  else if(total>=14){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(3,7)); if(state.flags.scoutedChest){ state.flags.scoutedChest=false; chest(); } }
-  else if(total>=9){ write("Des traces fraîches… une rencontre approche."); if(rng.rand()<0.6) randomEncounter(); }
-  else { write("Aïe ! Ronce traîtresse.","bad"); damage(rng.between(1,3),"Ronces"); }
-  continueBtn(()=>explore());
-}
-function rest(){
-  addScene(hasItem('Tente légère')?'camp':'forest',(state.time==='Nuit'||state.time==='Crépuscule')?'night':null);
-  const safer = hasItem('Tente légère') ? 0.2 : 0.35;
-  if(rng.rand()<safer){ write("Quelque chose approche pendant ton repos…","warn"); randomEncounter(); }
-  else { heal(rng.between(4,8)+(hasItem('Tente légère')?2:0)); write("Tu dors un peu. Ça fait du bien.","good"); }
-  continueBtn(()=>explore());
-}
-function useItemMenu(){
-  clearChoices();
-  addChoice(`🧪 Potion (${state.potions})`, ()=>{
-    if(state.potions<=0){ write("Tu n'as pas de potion.","warn"); return continueBtn(()=>explore()); }
-    state.potions--; heal(rng.between(8,12)); continueBtn(()=>explore());
-  }, true);
-  if(hasItem('Antidote')) addChoice("💉 Antidote", ()=>{ state.status = state.status.filter(s=>s.type!=='poison'); removeItem('Antidote'); write("Le poison est purgé.","good"); continueBtn(()=>explore()); });
-  if(hasItem('Corde solide')) addChoice("🪢 Poser une corde (sécurise)", ()=>{ state.flags.rope=2; write("Tu sécurises un passage difficile pour plus tard.","info"); continueBtn(()=>explore()); });
-  addChoice("↩️ Annuler", ()=>explore());
-}
-function chest(riche=false){
-  addScene('ruins');
-  const r=rng.between(1,100);
-  if(r>90 || (riche && r>70)){ addItem("Bouclier en fer","+2 armure","🛡️","rare"); }
-  else if(r>70){ addItem("Potion de soin","Rest. 8-12 PV","🧪","common"); state.potions++; }
-  else if(r>55){ addItem("Antidote","Soigne le poison","💉","common"); }
-  else if(r>40){ addItem("Corde solide","Aide à éviter les chutes","🪢","common"); state.flags.rope = (state.flags.rope||0)+1; }
-  else { changeGold(rng.between(8,18)); }
-}
-function randomEncounter(){
-  const roll=rng.rand(); const zone=state.locationKey;
-  if(roll<0.5){
-    if(zone==='marais'){ addScene('ghoul'); combat(mobTemplates.ghoul()); }
-    else if(zone==='clairiere'){ addScene('bandit'); combat(mobTemplates.bandit()); }
-    else if(zone==='colline'){ addScene('harpy'); combat(mobTemplates.harpy()); }
-    else { addScene('wolf'); combat(mobTemplates.wolf()); }
-  }else{
-    [eventSanctuary,eventHerbalist,eventSmith,eventHermit][rng.between(0,3)]();
-  }
-}
-
-// ---------- PNJ / Événements ----------
-// Herboriste (torche, potions, soins, options de classe)
-function eventHerbalist(){
-  addScene('herbalist'); write("🌿 Une herboriste t’accueille sous un auvent de lierre.");
-  clearChoices();
-  addChoice("Potion (3 or)", ()=>{
-    if(state.gold>=3){ changeGold(-3); state.potions++; write("Potion ajoutée.","good"); } else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  }, true);
-  addChoice("Torche (4 or)", ()=>{
-    if(state.gold>=4){ changeGold(-4); state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte','🔥','common'); } else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice("Antidote (3 or)", ()=>{
-    if(state.gold>=3){ changeGold(-3); addItem('Antidote','Soigne le poison','💉','common'); } else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  });
-  if(state.cls==='Mystique'){
-    addChoice("Scruter les herbes (WIS)", ()=>{
-      const {total}=d20(state.attrs.WIS>=3?2:0);
-      if(total>=15){ gainXP(4); write("Tu découvres une plante aux vertus apaisantes.","good"); }
-      else write("Ce n’était qu’une ortie…","warn");
-      continueBtn(()=>explore());
-    });
-  }
-  addChoice("Soin (2 or / gratuit si rép ≥ 25)", ()=>{
-    const prix = state.rep>=25 ? 0 : 2;
-    if(state.gold>=prix){ if(prix>0) changeGold(-prix); heal(rng.between(6,12)); } else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice("Partir", ()=>continueBtn(()=>explore()));
-}
-
-// ⚒️ Forgeron — **FIX robuste** : chaque option termine proprement par un seul "Continuer".
-function eventSmith(){
-  addScene('smith'); write('⚒️ Un forgeron itinérant tapote l’acier : "On peut améliorer."');
-  clearChoices();
-
-  // helpers internes : garantissent une issue unique
-  const done = ()=>continueBtn(()=>explore());
-
-  addChoice('Affûter (+1 ATQ, 5 or)', ()=>{
-    if(state.gold>=5){ changeGold(-5); addItem('Épée affûtée','+1 attaque','🗡️','rare'); }
-    else write("Pas assez d'or.",'warn');
-    done();
-  }, true);
-
-  addChoice('Bouclier en fer (+2 CA, 6 or)', ()=>{
-    if(state.gold>=6){ changeGold(-6); addItem('Bouclier en fer','+2 armure','🛡️','rare'); }
-    else write("Pas assez d'or.",'warn');
-    done();
-  });
-
-  addChoice('Cuir renforcé (+2 CA, 6 or)', ()=>{
-    if(state.gold>=6){ changeGold(-6); addItem('Cuir renforcé','+2 armure souple','🧥','rare'); }
-    else write("Pas assez d'or.",'warn');
-    done();
-  });
-
-  addChoice('Bricoler (AGI) — garde affermie', ()=>{
-    const {total}=d20(state.attrs.AGI>=3?2:0);
-    if(total>=16){ write("La garde tient mieux : +1 CA (prochaine rencontre).","good"); state.status.push({type:'guard',name:'Garde affermie',dur:1}); }
-    else { write("Raté : tu te coupes.",'warn'); damage(2,'Mauvaise manip'); }
-    done();
-  });
-
-  addChoice('Discuter', ()=>{
-    write('Il raconte : "Des runes s’illuminent aux ruines quand on rapproche trois éclats…"','info');
-    gainXP(2);
-    done();
-  });
-
-  addChoice('Partir', done);
-}
-
-function eventBard(){
-  addScene('bard'); write('🎻 Un barde accorde son luth : "Une chanson contre une pièce ?"');
-  clearChoices();
-  addChoice('Écouter (1 or)', ()=>{
-    if(state.gold>=1){ changeGold(-1); if(rng.rand()<0.7){ heal(rng.between(3,7)); write("L’air te ragaillardit.","good"); } else write("Tu as l’impression d’avoir déjà entendu ça…"); }
-    else write("Tu fouilles ta bourse vide.","warn");
-    continueBtn(()=>explore());
-  }, true);
-  addChoice('Demander des rumeurs (2 or)', ()=>{
-    if(state.gold>=2){ changeGold(-2); write('Il chuchote : "On parle d’un chef bandit vers les ruines..."',"info"); state.flags.rumors=(state.flags.rumors||0)+1; if(state.flags.rumors>=3) state.flags.bossUnlocked=true; }
-    else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  });
-  if(state.cls==='Guerrier'){
-    addChoice('Intimider le public (STR)', ()=>{
-      const {total}=d20(state.attrs.STR>=3?2:0);
-      if(total>=15){ changeGold(rng.between(1,3)); rep(-1); write("On te paie pour que tu t’éloignes de la scène…","warn"); }
-      else { write("On rit de toi.","bad"); rep(-1); }
-      continueBtn(()=>explore());
-    });
-  }
-  addChoice('Partir', ()=>continueBtn(()=>explore()));
-}
-
-function eventRuins(){
-  addScene('ruins'); write('🏚️ Des ruines effondrées se dressent. Des passages paraissent instables.');
-  clearChoices();
-  addChoice('Fouiller prudemment (WIS)', ()=>{
-    const bonus = (state.attrs.WIS>=3?1:0)+(state.flags.rope?1:0);
-    const {total}=d20(bonus);
-    if(state.flags.rope) state.flags.rope=Math.max(0,state.flags.rope-1);
-    if(total>=17){
-      if(!state.flags.torch){ state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte','🔥','rare'); }
-      else {
-        if(rng.rand()<0.35){ state.flags.fragments++; write('✨ Tu trouves un <b>fragment d’artefact</b>.','good'); if(state.flags.fragments>=3){ write('Les fragments vibrent… Une porte doit réagir.','info'); } }
-        else chest();
-      }
-    } else if(total>=11){ chest(); }
-    else { const hurt = state.flags.rope? rng.between(1,2) : rng.between(3,6); damage(hurt,'Éboulement'); }
-    continueBtn(()=>explore());
-  }, true);
-  addChoice('Piocher les gravats (STR)', ()=>{
-    const {total}=d20(state.attrs.STR>=3?2:0);
-    if(total>=16){ changeGold(rng.between(6,12)); write("Tu dégages des reliques vendables.","good"); }
-    else { damage(rng.between(1,4),'Effort'); }
-    continueBtn(()=>explore());
-  });
-  addChoice('Tracer des repères (AGI)', ()=>{
-    const {total}=d20(state.attrs.AGI>=3?2:0);
-    if(total>=14){ state.flags.scouted=true; write("Tu pourras revenir plus sûrement.","info"); }
-    else write("Tes marques s’effacent déjà…","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice('Partir', ()=>continueBtn(()=>explore()));
-}
-
-function eventPeasant(){
-  addScene('peasant'); write('🧑‍🌾 Un paysan enchaîné appelle à l’aide.');
-  clearChoices();
-  addChoice('Briser les chaînes (STR)', ()=>{
-    const {total}=d20(state.attrs.STR>=3?2:0);
-    if(total>=14){
-      write('Les chaînes cèdent.','good'); rep(+5); state.flags.peasantSaved=true;
-      state.quests.side.push({title:'Le paysan reconnaissant',state:'En attente'});
-      changeGold(rng.between(1,3));
-    } else { damage(rng.between(1,4),'Effort'); }
-    continueBtn(()=>explore());
-  }, true);
-  addChoice('Forcer le cadenas (AGI)', ()=>{
-    const {total}=d20(state.attrs.AGI>=3?2:0);
-    if(total>=15){ write('Tu ouvres sans bruit.','good'); rep(+3); state.flags.peasantSaved=true; }
-    else { write("Le mécanisme te glisse des doigts.","warn"); rep(-1); }
-    continueBtn(()=>explore());
-  });
-  addChoice('Ignorer', ()=>{ rep(-3); continueBtn(()=>explore()); });
-}
-
-function eventSanctuary(){
-  addScene('sanctuary'); write('⛪ Un ancien sanctuaire se dévoile.');
-  clearChoices();
-  addChoice('Prier', ()=>{
-    const night = state.time==='Nuit' || state.time==='Crépuscule';
-    const {total}=d20(); const t=total+(night?1:0);
-    if(t>=15){ heal(rng.between(6,12)); rep(+2); }
-    else { damage(rng.between(2,6),'Présage'); rep(-1); }
-    continueBtn(()=>explore());
-  }, true);
-  addChoice('Étudier les runes (WIS)', ()=>{
-    const {total}=d20(state.attrs.WIS>=3?2:0);
-    if(total>=16){ gainXP(4); write("Tu décryptes un avertissement ancien.","info"); }
-    else write("Les symboles te donnent mal à la tête.","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice('Profaner (STR)', ()=>{
-    const {total}=d20(state.attrs.STR>=3?1:0);
-    if(total>=16){ changeGold(rng.between(8,16)); rep(-3); }
-    else { damage(rng.between(4,7),'Malédiction'); rep(-5); }
-    continueBtn(()=>explore());
-  });
-  addChoice('Partir', ()=>continueBtn(()=>explore()));
-}
-
-function eventHermit(){
-  addScene('hermit'); write('🧙 Un ermite t’observe : "Réponses… ou chances ?"');
-  clearChoices();
-  addChoice('Boire sa décoction (aléatoire)', ()=>{
-    if(rng.rand()<0.6){ heal(rng.between(5,10)); gainXP(3); }
-    else { damage(rng.between(2,5),'Nausée'); }
-    continueBtn(()=>explore());
-  }, true);
-  addChoice('Breloque (5 or)', ()=>{
-    if(state.gold>=5){ changeGold(-5); addItem("Breloque d'ermite","10% d’annuler un mal","🧿","epic"); state.flags.charm=1; }
-    else write("Pas assez d'or.",'warn');
-    continueBtn(()=>explore());
-  });
-  addChoice('Présage (rép ≥ 10)', ()=>{
-    if(state.rep>=10){ write("“Au troisième éclat, la voie s’ouvrira près des ruines.”","info"); state.flags.rumors=(state.flags.rumors||0)+1; if(state.flags.rumors>=3) state.flags.bossUnlocked=true; }
-    else write("Il t’ignore.","warn");
-    continueBtn(()=>explore());
-  });
-}
-
-// 🛒 Caravane
-function eventCaravan(){
-  addScene('caravan'); write("Une caravane déploie ses étals.");
-  clearChoices();
-  addChoice("Tente légère (6 or)", ()=>{
-    if(state.gold>=6){ changeGold(-6); addItem('Tente légère','Repos plus sûr & +2 soin','⛺','rare'); }
-    else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  }, true);
-  addChoice("Corde solide (3 or)", ()=>{
-    if(state.gold>=3){ changeGold(-3); addItem('Corde solide','Sécurise un passage','🪢','common'); state.flags.rope=(state.flags.rope||0)+1; }
-    else write("Pas assez d'or.","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice("Vendre bric-à-brac (+3 or)", ()=>{
-    if(state.inventory.length>2){ changeGold(+3); write("Tu te délestes d’objets sans valeur sentimentale.","info"); }
-    else write("Rien d’inutile à vendre.","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice("Partir", ()=>continueBtn(()=>explore()));
-}
-
-// 🌉 Pont : nouveaux choix cohérents
-function eventBridge(){
-  write("Un vieux pont grince. L’eau en contrebas est sombre.");
-  clearChoices();
-  addChoice("Payer un péage à un garde (2 or)", ()=>{
-    if(state.gold>=2){ changeGold(-2); write("Le garde laisse passer en te saluant.","info"); gainXP(2); }
-    else write("Tu n’as pas assez. Le garde t’ignore.","warn");
-    continueBtn(()=>explore());
-  }, true);
-  addChoice("Sauter (STR)", ()=>{
-    const {total}=d20(state.attrs.STR>=3?2:0);
-    if(total>=15){ write("Tu franchis la brèche sans encombre.","good"); gainXP(3); }
-    else { damage(rng.between(2,5),'Chute'); }
-    continueBtn(()=>explore());
-  });
-  addChoice("Équilibriste (AGI)", ()=>{
-    const {total}=d20(state.attrs.AGI>=3?2:0);
-    if(total>=15){ write("Tu passes sur la poutre fendue.","good"); }
-    else { damage(rng.between(1,4),'Glissade'); }
-    continueBtn(()=>explore());
-  });
-  if(hasItem('Corde solide')){
-    addChoice("Fixer une corde", ()=>{
-      write("Tu stabilises le passage pour d’autres voyageurs.","info"); rep(+1);
-      state.flags.rope=Math.max(0,(state.flags.rope||1)-1); removeItem('Corde solide');
-      continueBtn(()=>explore());
-    });
-  }
-  addChoice("Rebrousser chemin", ()=>continueBtn(()=>explore()));
-}
-
-// ⭐ Pierre de vœux
-function eventWishingStone(){
-  write("Une pierre lisse et tiède émet une pulsation discrète.");
-  clearChoices();
-  addChoice("Formuler un vœu (soin)", ()=>{
-    heal(rng.between(5,9)); rep(+1); continueBtn(()=>explore());
-  }, true);
-  addChoice("Formuler un vœu (richesse)", ()=>{
-    if(rng.rand()<0.6){ changeGold(rng.between(5,12)); } else { damage(2,'Caprice des runes'); }
-    continueBtn(()=>explore());
-  });
-  addChoice("Formuler un vœu (pouvoir)", ()=>{
-    const {total}=d20(state.attrs.WIS>=3?1:0);
-    if(total>=15){ state.skill.cd = 0; write("Tu sens l’énergie affluer : ta compétence est prête.","good"); }
-    else write("Silence… rien ne répond.","warn");
-    continueBtn(()=>explore());
-  });
-  addChoice("Ignorer", ()=>continueBtn(()=>explore()));
-}
-
-// 🪵 Tourbière (marais)
-function eventBog(){
-  write("Le sol cède un peu : tourbière traîtresse.");
-  clearChoices();
-  addChoice("Avancer prudemment", ()=>{
-    const bonus = (state.flags.rope?1:0);
-    const {total}=d20(bonus);
-    if(state.flags.rope) state.flags.rope=Math.max(0,state.flags.rope-1);
-    if(total>=13){ write("Tu t’en tires sans mal.","good"); }
-    else damage(rng.between(2,5),'Enlisement');
-    continueBtn(()=>explore());
-  }, true);
-  addChoice("Contourner (AGI)", ()=>{
-    const {total}=d20(state.attrs.AGI>=3?2:0);
-    if(total>=14){ write("Tu trouves un passage plus ferme.","info"); }
-    else { damage(2,'Fausse manœuvre'); }
-    continueBtn(()=>explore());
-  });
-  addChoice("Reculer", ()=>continueBtn(()=>explore()));
-}
-
-// Porte ancienne (scénario)
-function eventAncientDoor(){
-  addScene('gate'); write("⚷ Une porte scellée vibre à l’approche des trois fragments.");
-  clearChoices();
-  addChoice("Assembler les fragments (WIS)", ()=>{
-    const {total}=d20(state.attrs.WIS>=3?2:0);
-    if(total>=15){
-      write("Les runes s’illuminent, la porte pivote lentement.","good");
-      addItem('Lame runique','+1 ATQ & +1 dégâts contre bandits','🗡️','epic');
-      state.flags.doorDone=true; rep(+2); gainXP(8);
-    }else{
-      write("Les fragments se rejettent. Un choc te repousse.","warn");
-      damage(rng.between(2,5),'Répercussion');
-    }
-    continueBtn(()=>explore());
-  }, true);
-  addChoice("Forcer le battant (STR)", ()=>{
-    const {total}=d20(state.attrs.STR>=3?2:0);
-    if(total>=17){
-      write("Tu dégondes le battant dans un fracas. Derrière : un autel.",'good');
-      changeGold(rng.between(10,18)); state.flags.doorDone=true; gainXP(6);
-    }else{
-      write("La pierre tient bon. La secousse te meurtrit.",'warn');
-      damage(rng.between(3,6),'Contrecoup');
-    }
-    continueBtn(()=>explore());
-  });
-  if(state.cls==='Voleur' || state.cls==='Mystique'){
-    addChoice("Contourner un mécanisme caché", ()=>{
-      const {total}=d20((state.cls==='Voleur'&&state.attrs.AGI>=3)?2: (state.cls==='Mystique'&&state.attrs.WIS>=3)?2:0);
-      if(total>=15){ state.flags.doorDone=true; write("Tu déverrouilles une fente et récupères un coffret.",'good'); chest(true); gainXP(5); }
-      else { write("Un cliquetis… mais rien ne cède.","warn"); }
-      continueBtn(()=>explore());
-    });
-  }
-}
-
-// ---------- Bestiaire ----------
+// === Bestiaire ===
 const mobTemplates = {
-  wolf: ()=>({ name:"Loup affamé", hp:10, maxHp:10, ac:11, hitMod:2, tier:1, dotChance:0, dotType:null, scene:'wolf' }),
+  wolf: ()=>({ name:"Loup affamé", hp:10, maxHp:10, ac:11, hitMod:2, tier:1, dotChance:0, dotType:null, scene:'loup' }),
   bandit: ()=>({ name:"Bandit des fourrés", hp:12, maxHp:12, ac:12, hitMod:3, tier:2, dotChance:0.1, dotType:'bleed', scene:'bandit' }),
-  boar:  ()=>({ name:"Sanglier irascible", hp:11, maxHp:11, ac:11, hitMod:2, tier:1, dotChance:0.05, dotType:'bleed', scene:'boar' }),
+  boar: ()=>({ name:"Sanglier irascible", hp:11, maxHp:11, ac:11, hitMod:2, tier:1, dotChance:0.05, dotType:'bleed', scene:'boar' }),
   harpy: ()=>({ name:"Harpie du vent", hp:14, maxHp:14, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'bleed', scene:'harpy' }),
   ghoul: ()=>({ name:"Goule des roseaux", hp:13, maxHp:13, ac:12, hitMod:3, tier:2, dotChance:0.25, dotType:'poison', scene:'ghoul' }),
-  chief: ()=>({ name:"Chef Bandit", hp:24, maxHp:24, ac:14, hitMod:5, tier:3, dotChance:0.3, dotType:'bleed', scene:'boss' })
+  chief: ()=>({ name:"Chef Bandit", hp:24, maxHp:24, ac:14, hitMod:5, tier:3, dotChance:0.3, dotType:'bleed', scene:'boss' }),
 };
 
-// ---------- Boss ----------
+// === Boss spécial ===
 function combatBoss(){
-  const boss=mobTemplates.chief();
-  write('🥷 Tu t’infiltres dans la planque du Chef Bandit.','warn'); addScene('boss');
+  const boss = mobTemplates.chief();
+  addScene('boss');
+  write('🥷 Tu t’infiltres dans la planque du Chef Bandit.','warn');
   combat(boss);
+  // Rage à mi-vie
   const _enemyAttack = enemyAttack;
   enemyAttack = function(){
     if(state.enemy && state.enemy.name==='Chef Bandit' && state.enemy.hp<=state.enemy.maxHp/2 && !state.enemy.enraged){
@@ -839,30 +315,371 @@ function combatBoss(){
   }
 }
 
-// ---------- Fins ----------
+// === Temps & exploration ===
+function setTime(){
+  const slots=["Aube","Matin","Midi","Après-midi","Crépuscule","Nuit"];
+  const idx=slots.indexOf(state.time);
+  let n=(idx+1)%slots.length;
+  if(n===0) state.day++;
+  state.time=slots[n];
+  ui.day.textContent=`Jour ${state.day} — ${state.time}`;
+}
+
+function pickWeighted(items, k){
+  const recent = new Set(state.lastLabels);
+  let pool = items.flatMap(it => Array((it.w||1)).fill(it)).filter(it=> !recent.has(it.label));
+  if(pool.length<k) pool = items.flatMap(it => Array((it.w||1)).fill(it));
+  const out=[];
+  for(let i=0;i<k && pool.length;i++){
+    const idx=Math.floor(rng.rand()*pool.length);
+    out.push(pool[idx]);
+    pool=pool.filter((_,j)=>j!==idx);
+  }
+  state.lastLabels = [...out.map(o=>o.label), ...state.lastLabels].slice(0,8);
+  return out;
+}
+
+function continueInfo(){ singleContinue(()=>explore()); }
+
+function explore(initial=false){
+  setStats();
+  ui.loc.textContent = state.location;
+  ui.day.textContent = `Jour ${state.day} — ${state.time}`;
+  clearChoices();
+  if(!initial) setTime();
+  tickStatus();
+  if(state.hp<=0) return;
+
+  // Événement temporel unique
+  if(state.day>=5 && !state.flags.oracleSeen) { eventOracle(); return }
+
+  const zone = state.locationKey;
+
+  const base = [
+    { label:"Fouiller", act:searchArea, w:2 },
+    { label:"Se reposer", act:rest, w:1 },
+    { label:"Utiliser un objet", act:useItemMenu, w:1 }
+  ];
+
+  let pool=[];
+  if(zone==='marais'){
+    pool.push({label:'Suivre des feux-follets', act:eventSanctuary, w:2});
+    pool.push({label:'Aider un captif', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); continueInfo(); } }, w:1});
+    pool.push({label:'Traquer une goule', act:()=>combat(mobTemplates.ghoul()), w:3});
+    pool.push({label:'Affronter un loup', act:()=>combat(mobTemplates.wolf()), w:2});
+    pool.push({label:'Tomber sur un piège', act:()=>{ eventTrap(); continueInfo(); }, w:1});
+  }
+  else if(zone==='clairiere'){
+    pool.push({label:'Croiser une herboriste', act:eventHerbalist, w:2});
+    pool.push({label:'Écouter un barde', act:eventBard, w:1});
+    pool.push({label:'Chasser un sanglier', act:()=>combat(mobTemplates.boar()), w:2});
+    pool.push({label:'Autel moussu', act:eventSanctuary, w:2});
+    pool.push({label:'Bandits embusqués', act:()=>combat(mobTemplates.bandit()), w:2});
+    pool.push({label:'Rencontrer un forgeron', act:eventSmith, w:1});
+  }
+  else if(zone==='colline'){
+    pool.push({label:'Rencontrer un ermite', act:eventHermit, w:2});
+    pool.push({label:'Explorer des ruines', act:eventRuins, w:2});
+    pool.push({label:'Affronter une harpie', act:()=>combat(mobTemplates.harpy()), w:3});
+    pool.push({label:'Sentier vers les ruines', act:()=>gotoZone('ruines'), w:1});
+  }
+  else if(zone==='ruines'){
+    pool.push({label:'Fouiller les décombres', act:eventRuins, w:3});
+    pool.push({label:'Écarter des pierres instables', act:()=>{ if(d20().total<10) damage(rng.between(1,4),'Éboulement'); else write("Tu avances prudemment."); continueInfo(); }, w:1});
+    pool.push({label:'Combattre des bandits', act:()=>combat(mobTemplates.bandit()), w:2});
+  }
+  else if(zone==='grotte'){
+    pool.push({label:'Affronter une goule ancienne', act:()=>combat({name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison', scene:'ghoul'}), w:3});
+    pool.push({label:'Échos inquiétants', act:()=>{ const r=d20().total; if(r<10) damage(3,'Stalactite'); else write('Rien ne se passe.'); continueInfo(); }, w:1});
+  }
+
+  if(state.flags.bossUnlocked) pool.push({label:"Traquer le Chef Bandit", act:()=>combatBoss(), w:1});
+
+  const nav = [
+    {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
+    {label:'→ Clairière', act:()=>gotoZone('clairiere'), w:1},
+    {label:'→ Colline', act:()=>gotoZone('colline'), w:1},
+    {label:'→ Ruines', act:()=>gotoZone('ruines'), w: state.flags.ruinsUnlocked?1:0},
+    {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer. Trouve une torche.','warn'), continueInfo()), w:1}
+  ].filter(x=>x.w>0);
+
+  // 4 actions au total : 2 de base + 1-2 dynamiques + 0-1 nav
+  const dyn = pickWeighted(pool, 2 + (rng.rand()<0.5?1:0));
+  const navPick = pickWeighted(nav, 1);
+  const all = pickWeighted([...base, ...dyn, ...navPick], 4);
+
+  all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
+}
+
+function gotoZone(key){
+  state.locationKey=key;
+  state.location = key==='marais'?"Marais de Vire-Saule":
+                   key==='clairiere'?"Clairière des Lys":
+                   key==='colline'?"Colline de Rocfauve":
+                   key==='ruines'?"Ruines Oubliées":
+                   key==='grotte'?"Grotte Sépulcrale":"Lisière";
+  write(`👉 Tu te diriges vers ${state.location}.`,"sys");
+  explore(true);
+}
+
+// === Actions générales ===
+function searchArea(){
+  const bonus = state.attrs.WIS>=3?1:0;
+  const {total} = d20(bonus);
+  if(total>=18){ write("🔑 Recherche exceptionnelle : tu trouves un coffre scellé.","good"); chest(); }
+  else if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); }
+  else if(total>=8){ write("Des traces fraîches… une rencontre approche."); if(rng.rand()<0.5) randomEncounter(); }
+  else { write("Aïe ! Ronce traîtresse.","bad"); damage(rng.between(1,3),"Ronces"); }
+  continueInfo();
+}
+
+function rest(){
+  if(rng.rand()<0.35){ write("Quelque chose approche pendant ton repos…","warn"); randomEncounter(); }
+  else { heal(rng.between(4,8)); write("Tu dors un peu. Ça fait du bien.","good"); }
+  continueInfo();
+}
+
+function useItemMenu(){
+  clearChoices();
+  addChoice(`Boire une potion (${state.potions})`, ()=>{
+    if(state.potions<=0){ write("Tu n'as pas de potion.","warn"); return continueInfo(); }
+    state.potions--; heal(rng.between(8,12)); continueInfo();
+  }, true);
+  addChoice("Annuler", ()=>explore());
+}
+
+function chest(){
+  const r=rng.between(1,100);
+  if(r>90){ addItem("Bouclier en fer","+2 armure"); }
+  else if(r>70){ addItem("Potion de soin","Rest. 8-12 PV"); state.potions++; }
+  else if(r>40){ changeGold(rng.between(7,15)); }
+  else { write("💥 Piège !","bad"); damage(rng.between(3,6),"Piège"); }
+}
+
+function randomEncounter(){
+  const roll=rng.rand();
+  const zone=state.locationKey;
+  if(roll<0.5) {
+    if(zone==='marais') combat(mobTemplates.ghoul());
+    else if(zone==='clairiere') combat(mobTemplates.bandit());
+    else if(zone==='ruines') combat(mobTemplates.bandit());
+    else combat(mobTemplates.harpy());
+  } else {
+    [eventSanctuary,eventHerbalist,eventSmith,eventHermit][rng.between(0,3)]();
+  }
+}
+
+// === PNJ & événements ===
+function eventHerbalist(){
+  addScene('herbalist');
+  write("🌿 Une herboriste te fait signe.");
+  clearChoices();
+  addChoice("S’approcher", ()=>{
+    if(state.rep<-20){ write("Elle se détourne : « Je ne sers pas les cruels. »",'warn'); rep(-1); return continueInfo(); }
+    write("Elle prépare une mixture fumante…");
+    const cost=(state.rep>20?2:3);
+    if(state.gold>=cost){ changeGold(-cost); heal(rng.between(6,12)); state.flags.metHerbalist=true; }
+    else write("Tu n'as pas assez d'or.","warn");
+    continueInfo();
+  }, true);
+  addChoice("Marchander", ()=>{
+    const {total}=d20(state.attrs.WIS>=3?2:0);
+    if(total>=15){ heal(rng.between(4,8)); write('Elle sourit : « À prix d’ami. »','good'); }
+    else write('Elle refuse.','warn');
+    continueInfo();
+  });
+  addChoice("Partir", continueInfo);
+}
+
+function eventSmith(){
+  addScene('forgeron');
+  write('⚒️ Un forgeron itinérant inspecte tes armes.');
+  clearChoices();
+  addChoice('Acheter une torche (3 or)', ()=>{
+    if(state.flags.torch){ write("Tu as déjà une torche.","warn"); return continueInfo(); }
+    if(state.gold>=3){ changeGold(-3); state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte'); }
+    else write("Pas assez d'or.",'warn');
+    continueInfo();
+  }, true);
+  addChoice('Affûter l’épée (5 or)', ()=>{
+    if(hasItem('Épée affûtée')){ write("Ton épée est déjà affûtée.",'warn'); return continueInfo(); }
+    if(state.gold>=5){ changeGold(-5); addItem('Épée affûtée','+1 attaque'); }
+    else write("Pas assez d'or.",'warn');
+    continueInfo();
+  });
+  addChoice('Acheter un bouclier (6 or)', ()=>{
+    if(hasItem('Bouclier en fer')){ write("Tu as déjà ce bouclier.",'warn'); return continueInfo(); }
+    if(state.gold>=6){ changeGold(-6); addItem('Bouclier en fer','+2 armure'); }
+    else write("Pas assez d'or.",'warn');
+    continueInfo();
+  });
+  addChoice('Discuter', ()=>{ gainXP(3); write("Le forgeron partage de vieilles histoires de brigands.","info"); continueInfo(); });
+}
+
+function eventBard(){
+  addScene('barde');
+  write('🎻 Un barde propose une chanson.');
+  clearChoices();
+  addChoice('Écouter', ()=>{
+    if(rng.rand()<0.7){ heal(rng.between(3,7)); write("La mélodie t’apaise.","good"); }
+    else { changeGold(-2); write('…quelqu’un fait les poches.','warn'); }
+    continueInfo();
+  }, true);
+  addChoice('L’ignorer', continueInfo);
+}
+
+function eventRuins(){
+  addScene('ruins');
+  write('🏚️ Des ruines effondrées se dressent.');
+  clearChoices();
+  addChoice('Fouiller', ()=>{
+    const {total}=d20(state.attrs.WIS>=3?1:0);
+    if(total>=16){
+      if(!state.flags.torch){
+        state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte');
+      } else if(state.flags.fragments<3){
+        state.flags.fragments++; write(`Tu trouves un fragment d’artefact. (${state.flags.fragments}/3)`,'good');
+        if(state.flags.fragments>=3){ state.quests.artifacts.state='Complet'; }
+      } else {
+        changeGold(rng.between(5,9));
+      }
+    } else if(total>=10){ chest(); }
+    else { damage(rng.between(2,5),'Éboulement'); }
+    continueInfo();
+  }, true);
+  addChoice('Partir', continueInfo);
+}
+
+function eventPeasant(){
+  addScene('peasant');
+  write('🧑‍🌾 Un paysan enchaîné appelle à l’aide.');
+  clearChoices();
+  addChoice('Le libérer', ()=>{
+    const {total}=d20(state.attrs.STR>=3?2:0);
+    if(total>=14){
+      write('Les chaînes cèdent.','good');
+      rep(+5);
+      state.flags.peasantSaved=true;
+      state.quests.side.push({title:'Le paysan reconnaissant',state:'En attente'});
+    } else { damage(rng.between(1,4),'Effort'); }
+    continueInfo();
+  }, true);
+  addChoice('L’ignorer', ()=>{ rep(-3); continueInfo(); });
+}
+
+function eventSanctuary(){
+  addScene('sanctuaire');
+  write('⛪ Un ancien sanctuaire se dévoile.');
+  clearChoices();
+  addChoice('Prier', ()=>{
+    const night = state.time==='Nuit' || state.time==='Crépuscule';
+    const {total}=d20();
+    const t=total+(night?1:0);
+    if(t>=15){ heal(rng.between(6,12)); rep(+2); }
+    else { damage(rng.between(2,6),'Présage'); rep(-1); }
+    continueInfo();
+  }, true);
+  addChoice('Profaner', ()=>{
+    const {total}=d20(-1);
+    if(total>=16){ changeGold(rng.between(8,16)); rep(-3); }
+    else { damage(rng.between(4,7),'Malédiction'); rep(-5); }
+    continueInfo();
+  });
+  addChoice('Partir', continueInfo);
+}
+
+function eventHermit(){
+  addScene('hermit');
+  write('🧙 Un ermite t’observe en silence.');
+  clearChoices();
+  addChoice('Accepter sa décoction', ()=>{
+    if(rng.rand()<0.6){ heal(rng.between(5,10)); gainXP(3); }
+    else { damage(rng.between(2,5),'Nausée'); }
+    continueInfo();
+  }, true);
+  addChoice('Acheter une breloque (5 or)', ()=>{
+    if(state.flags.charm){ write("Tu as déjà la breloque.",'warn'); return continueInfo(); }
+    if(state.gold>=5){ changeGold(-5); addItem("Breloque d'ermite","10% annule un mal"); state.flags.charm=1; }
+    else write("Pas assez d'or.",'warn');
+    continueInfo();
+  });
+  addChoice('Refuser', continueInfo);
+}
+
+function eventTrap(){
+  write('🪤 Une corde s’enroule à ta cheville !');
+  const {total}=d20(state.attrs.AGI>=3?2:0);
+  if(total>=13) write('Tu t’en sors de justesse.','good');
+  else damage(rng.between(2,5),'Piège');
+}
+
+function eventOracle(){
+  write('🔮 Une voyante apparaît dans tes rêves.');
+  clearChoices();
+  addChoice('Écouter la prophétie', ()=>{
+    write('« Quand trois éclats seront réunis, la porte s’ouvrira. »','info');
+    state.flags.oracleSeen=true;
+    continueInfo();
+  }, true);
+}
+
+// === Fins ===
 function ending(){
   clearChoices();
   if(state.rep>=30){ write('<b>Fin héroïque :</b> Mirval te salue comme un sauveur.','good'); state.achievements.hero=true; }
   else if(state.rep<=-30){ write('<b>Fin sombre :</b> ta légende glace le sang des voyageurs.','bad'); state.achievements.villain=true; }
   else { write('<b>Fin neutre :</b> tu quittes la forêt, plus sage qu’avant.','info'); }
   addChoice('Rejouer (New Game+)', ()=>{
-    const st=initialState(); st.attrs.STR++; st.attrs.AGI++; st.attrs.WIS++; state=st; ui.log.innerHTML=''; setup(true);
+    const st=initialState();
+    st.attrs.STR++; st.attrs.AGI++; st.attrs.WIS++;
+    state=st; ui.log.innerHTML=''; setup(true);
   }, true);
   addChoice('Quitter', ()=>write('Merci d’avoir joué !'));
 }
 
-// ---------- Choix de classe ----------
+// === Choix de classe & compétences ===
 function chooseClass(){
-  clearChoices(); write('Choisis ta classe :','info'); addScene('class');
-  const pick = (nom, boostKey, boostVal, skill) => { state.cls = nom; if (boostKey) state.attrs[boostKey] = boostVal; state.skill = skill; setStats(); startAdventure(); };
-  addChoice('🛡️ Guerrier', ()=> pick('Guerrier','STR',3,{ name:'Frappe vaillante', cooldown:3, cd:0, use:(e)=>{ const dmg=rng.between(2,6)+rng.between(2,6)+state.level; e.hp-=dmg; write(`💥 Frappe vaillante : -${dmg} PV`,'good'); } }), true);
-  addChoice('🗡️ Voleur',  ()=> pick('Voleur','AGI',3,{ name:'Coup de l’ombre', cooldown:3, cd:0, use:(e)=>{ const r=d20(4).total; if(r>=e.ac){ const dmg=rng.between(3,8); e.hp-=dmg; write(`🗡️ L’ombre frappe : -${dmg} PV`,'good'); } else write('Tu rates.','warn'); } }));
-  addChoice('⚕️ Paladin', ()=> pick('Paladin','WIS',2,{ name:'Lumière', cooldown:3, cd:0, use:()=>{ heal(rng.between(3,8)+state.level); } }));
-  addChoice('🏹 Rôdeur',   ()=> pick('Rôdeur','AGI',3,{ name:'Tir précis', cooldown:2, cd:0, use:(e)=>{ const r=d20(6).total; if(r>=e.ac){ const dmg=rng.between(3,8); e.hp-=dmg; write(`🏹 Tir précis : -${dmg} PV`,'good') } else write('Tir manqué.','warn'); } }));
-  addChoice('🔮 Mystique', ()=> pick('Mystique','WIS',3,{ name:'Onde arcanique', cooldown:3, cd:0, use:(e)=>{ const dmg=rng.between(3,8); e.hp-=dmg; e.dotChance=Math.min(0.6,(e.dotChance||0)+0.15); write(`🔮 Onde arcanique : -${dmg} PV`,'good'); } }));
+  clearChoices();
+  write('Choisis ta classe :','info');
+
+  addChoice('🛡️ Guerrier', ()=>{
+    state.cls='Guerrier'; state.attrs.STR=3;
+    state.skill={
+      name:'Frappe vaillante', cooldown:3, cd:0,
+      use:(e)=>{ const dmg=rng.between(2,6)+rng.between(2,6)+state.level; e.hp-=dmg; write(`💥 Frappe vaillante : -${dmg} PV`,'good'); }
+    };
+    startAdventure();
+  }, true);
+
+  addChoice('🗡️ Voleur', ()=>{
+    state.cls='Voleur'; state.attrs.AGI=3;
+    state.skill={
+      name:'Coup de l’ombre', cooldown:3, cd:0,
+      use:(e)=>{ const r=d20(4).total; if(r>=e.ac){ const steal=Math.min(3, state.gold); const dmg=rng.between(3,8)+steal; e.hp-=dmg; changeGold(steal); write(`🗡️ L’ombre frappe : -${dmg} PV`,'good'); } else write('Tu rates.','warn'); }
+    };
+    startAdventure();
+  });
+
+  addChoice('⚕️ Paladin', ()=>{
+    state.cls='Paladin'; state.attrs.WIS=2;
+    state.skill={ name:'Lumière', cooldown:3, cd:0, use:()=>{ heal(rng.between(3,8)+state.level); } };
+    startAdventure();
+  });
+
+  addChoice('🏹 Rôdeur', ()=>{
+    state.cls='Rôdeur'; state.attrs.AGI=3;
+    state.skill={ name:'Tir précis', cooldown:2, cd:0, use:(e)=>{ const r=d20(6).total; if(r>=e.ac){ const dmg=rng.between(3,8); e.hp-=dmg; write(`🏹 Tir précis : -${dmg} PV`,'good'); } else write('Tir manqué.','warn'); } };
+    startAdventure();
+  });
+
+  addChoice('🔮 Mystique', ()=>{
+    state.cls='Mystique'; state.attrs.WIS=3;
+    state.skill={ name:'Onde arcanique', cooldown:3, cd:0, use:(e)=>{ const dmg=rng.between(3,8); e.hp-=dmg; e.dotChance=Math.min(0.6,(e.dotChance||0)+0.15); write(`🔮 Onde arcanique : -${dmg} PV`,'good'); } };
+    startAdventure();
+  });
 }
 
-// ---------- État initial ----------
+// === État initial ===
 function initialState(){
   return {
     name:"Eldarion",
@@ -875,16 +692,15 @@ function initialState(){
     location:"Lisière de la forêt de Mirval",
     locationKey:"clairiere",
     inventory:[
-      {name:"Vieille épée", desc:"+1 attaque", emoji:"🗡️", rarity:"common"},
-      {name:"Petite armure", desc:"+1 armure", emoji:"🛡️", rarity:"common"}
+      {name:"Vieille épée", desc:"+1 attaque"},
+      {name:"Petite armure", desc:"+1 armure"}
     ],
     potions:1,
     status:[],
     flags:{
-      metHerbalist:false,metSmith:false,peasantSaved:false,
-      fragments:0,bossUnlocked:false,torch:false,oracleSeen:false,
-      ruinsUnlocked:true,grottoUnlocked:false,rumors:0,charm:0,
-      scouted:false,scoutedChest:false,rope:0,doorDone:false
+      metHerbalist:false, metSmith:false, peasantSaved:false,
+      fragments:0, bossUnlocked:false, torch:false, oracleSeen:false,
+      ruinsUnlocked:true, grottoUnlocked:false, rumors:0, charm:0
     },
     quests:{
       main:{title:'Le Chef Bandit',state:'En cours'},
@@ -900,30 +716,41 @@ function initialState(){
 }
 let state = initialState();
 
-// ---------- Setup / Démarrage ----------
+// === SETUP / DÉMARRAGE ===
 function setup(isNew=false){
   setStats();
   ui.loc.textContent = state.location;
   ui.day.textContent = `Jour ${state.day} — ${state.time}`;
   clearChoices();
-  if (isNew || ui.log.childElementCount===0 || !state.cls || state.cls==="—"){
-    write("v10 — Démarrage.","sys");
+
+  const classesValides = ['Guerrier','Voleur','Paladin','Rôdeur','Mystique'];
+  const needsClass = !state.cls || state.cls === '—' || !classesValides.includes(state.cls);
+
+  if (isNew || ui.log.childElementCount===0 || needsClass){
+    write("v10 — Démarrage. Choisis ta classe.","sys");
     chooseClass();
     return;
   }
   explore(true);
 }
 
-// ---------- Début aventure ----------
+// Nouvelle aventure après choix de classe
 function startAdventure(){
   ui.log.innerHTML="";
-  addScene('forest');
-  write("L'aventure commence !","info");
+  write("L'aventure commence !", "info");
   setStats();
   explore(true);
 }
 
-// ---------- Cooldown compétence à chaque exploration ----------
+// Écran de mort
+function gameOver(){
+  state.inCombat=false;
+  write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
+  clearChoices();
+  addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
+}
+
+// Cooldown de compétence : -1 à chaque exploration
 const _explore = explore;
 explore = function(...args){
   if(state.skill && typeof state.skill.cd==='number'){
@@ -932,20 +759,16 @@ explore = function(...args){
   _explore(...args);
 };
 
-// ---------- Game Over ----------
-function gameOver(){
-  state.inCombat=false;
-  write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
-  clearChoices();
-  addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
+// PWA : enregistrement du service worker (facultatif)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }
 
-// ---------- Bouton Reset (HTML) ----------
-const btnReset=document.getElementById('btn-reset');
-if(btnReset) btnReset.onclick=()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
-
-// ---------- Boot ----------
+// Boot DOM-safe
 (function boot(){
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ()=>setup(true), { once:true });
-  else setup(true);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ()=>setup(true), { once:true });
+  } else {
+    setup(true);
+  }
 })();
