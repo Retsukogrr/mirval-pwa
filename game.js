@@ -1,5 +1,5 @@
-// === Aventurier de Mirval — game.js (v10 ++ : bug forgeron fixé, scénario/choix étoffés, visuels SVG, sans sauvegarde) ===
-console.log("Mirval v10++ — game.js chargé");
+// === Aventurier de Mirval — game.js (v10 — forgeron FIX + choix/scénario enrichis, visuels SVG, no-save) ===
+console.log("Mirval v10 — game.js chargé");
 
 // ---------- Wake Lock (mobile) ----------
 let wakeLock;
@@ -42,7 +42,7 @@ const ui = {
   quests: document.getElementById('quests')
 };
 
-// ---------- Styles (fade-in des scènes) ----------
+// ---------- Styles (scènes SVG + sécurité) ----------
 (function ensureSceneStyles(){
   if(document.getElementById('mirval-scene-style')) return;
   const st=document.createElement('style'); st.id='mirval-scene-style';
@@ -50,19 +50,26 @@ const ui = {
   .scene { margin:12px 0; text-align:center; }
   .scene svg { max-width:340px; height:auto; display:block; margin:10px auto;
                filter: drop-shadow(0 0 6px rgba(0,0,0,.6)); animation: sceneFade .45s ease both; }
-  @keyframes sceneFade { from {opacity:0; transform: translateY(4px)} to {opacity:1; transform: none} }`;
+  @keyframes sceneFade { from {opacity:0; transform: translateY(4px)} to {opacity:1; transform: none} }
+  .choices button[disabled]{opacity:.6; cursor:not-allowed}
+  `;
   document.head.appendChild(st);
 })();
 
-// ---------- Outils UI ----------
-let _eventLocked = false;        // empêche le multi-clic (anti-farm)
-let _continueActive = false;     // empêche plusieurs "Continuer"
+// ---------- Outils UI / anti-spam ----------
+let _eventLocked = false;        // empêche double-clic sur une option
+let _continueActive = false;     // garantit 1 seul bouton "Continuer"
+
 function write(html, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=html; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
 function clearChoices(){ ui.choices.innerHTML=""; _continueActive=false; _eventLocked=false; }
 function disableAllChoices(){ ui.choices.querySelectorAll('button').forEach(b=>b.disabled=true); }
 function addChoice(label, handler, primary=false){
   const btn=document.createElement('button'); if(primary) btn.classList.add('btn-primary'); btn.textContent=label;
-  btn.addEventListener('click', ()=>{ if(btn.disabled||_eventLocked) return; _eventLocked=true; disableAllChoices(); try{ handler(); }catch(e){ console.error(e); write("Erreur : "+e.message,"bad"); continueBtn(()=>explore()); } }, { once:true });
+  btn.addEventListener('click', ()=>{
+    if(btn.disabled||_eventLocked) return;
+    _eventLocked=true; disableAllChoices();
+    try{ handler(); }catch(e){ console.error(e); write("Erreur : "+e.message,"bad"); continueBtn(()=>explore()); }
+  }, { once:true });
   ui.choices.appendChild(btn);
 }
 function continueBtn(next=()=>explore()){
@@ -123,7 +130,6 @@ function svgScene(kind, variant=null){
     <filter id="soft"><feGaussianBlur stdDeviation="1.4"/></filter>
   </defs>`;
   const label = (txt) => `<text x="24" y="30" font-size="16" fill="#cbd5e1">${txt}</text>`;
-
   if(kind==='class'){
     return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">${defs}
       <rect width="640" height="230" fill="url(#bg1)"/>${label("Choisis ta classe")}
@@ -188,6 +194,16 @@ function svgScene(kind, variant=null){
   if(kind==='camp'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
     <rect width="640" height="230" fill="#0f172a"/><path d="M120,180 L160,120 L200,180 Z" fill="#6b7280"/><circle cx="240" cy="170" r="10" fill="#f59e0b"/>
     ${label("Campement")}</svg>`; }
+  if(kind==='bridge'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
+    <rect width="640" height="230" fill="#0b1220"/><rect x="80" y="150" width="480" height="10" fill="#6b7280"/>
+    <path d="M80,160 Q160,120 240,160 T400,160 T560,160" stroke="#374151" stroke-width="3" fill="none"/>
+    ${label("Vieux pont")}</svg>`; }
+  if(kind==='wishing'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
+    <rect width="640" height="230" fill="#0b0f1a"/><circle cx="520" cy="120" r="20" fill="#1f2937"/><text x="520" y="128" text-anchor="middle" font-size="16" fill="#93c5fd">⭐</text>
+    ${label("Pierre de vœux")}</svg>`; }
+  if(kind==='bog'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
+    <rect width="640" height="230" fill="#0b1a1a"/><ellipse cx="320" cy="170" rx="300" ry="60" fill="#153737"/>
+    ${label("Tourbière")}</svg>`; }
   if(kind==='bandit'){ return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg">
     <rect width="640" height="230" fill="#0b1320"/><circle cx="500" cy="110" r="36" fill="#1f2937"/>
     <rect x="468" y="140" width="64" height="60" rx="8" fill="#1f2937"/><rect x="472" y="102" width="56" height="16" fill="#0ea5e9" opacity=".5"/>
@@ -216,12 +232,12 @@ function svgScene(kind, variant=null){
   return `<svg viewBox="0 0 640 230" xmlns="http://www.w3.org/2000/svg"><rect width="640" height="230" fill="#0f172a"/><text x="320" y="120" text-anchor="middle" font-size="16" fill="#93c5fd">Mirval</text></svg>`;
 }
 
-// ---------- Combat / calculs ----------
-function playerAtkMod(){ let m=0; if(state.cls==='Guerrier') m+=2; if(state.attrs.STR>=3) m+=1; if(hasItem('Épée affûtée')) m+=1; return m; }
+// ---------- Combat ----------
+function playerAtkMod(){ let m=0; if(state.cls==='Guerrier') m+=2; if(state.attrs.STR>=3) m+=1; if(hasItem('Épée affûtée')) m+=1; if(hasItem('Lame runique')) m+=1; return m; }
 function playerDef(){
   let base = 10 + (state.cls==='Paladin'?1:0) + (state.attrs.AGI>=3?1:0)
     + (hasItem('Petite armure')?1:0) + (hasItem('Cuir renforcé')?2:0) + (hasItem('Bouclier en fer')?2:0);
-  if(hasStatus('guard')) base += 1; // ✅ correction : le statut "garde" améliore vraiment la CA
+  if(hasStatus('guard')) base += 1;
   return base;
 }
 function terrainPenalty(){ return state.locationKey==='marais' ? -1 : 0 }
@@ -268,13 +284,13 @@ function aimMenu(){
   clearChoices(); const e=state.enemy;
   addChoice('🎯 Viser la tête', ()=>{
     const r=d20(playerAtkMod()-2 + terrainPenalty()).total;
-    if(r>=e.ac+2){ const dmg=rng.between(6,10); e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); }
+    if(r>=e.ac+2){ let dmg=rng.between(6,10); if(hasItem('Lame runique') && e.name.includes('Bandit')) dmg+=1; e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); }
     else write('Tu manques la tête.','warn');
     enemyAttack(); combatTurn();
   }, true);
   addChoice('🗡️ Viser le torse', ()=>{
     const r=d20(playerAtkMod() + terrainPenalty()).total;
-    if(r>=e.ac){ const dmg=rng.between(3,7); e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); }
+    if(r>=e.ac){ let dmg=rng.between(3,7); if(hasItem('Lame runique') && e.name.includes('Bandit')) dmg+=1; e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); }
     else write('Tu manques.','warn');
     enemyAttack(); combatTurn();
   });
@@ -318,13 +334,10 @@ function afterCombat(){
   else if(r<0.35 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois","+1 armure légère","🛡️","common");
   else if(r<0.45) { state.potions++; write("Tu trouves une potion.","good"); }
   else if(r<0.5 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple","🧥","rare");
-  // Nouvelle chance d’éclat : 10% sur la Harpie
-  if(e.name.includes("Harpie") && rng.rand()<0.10){
-    state.flags.fragments++; write("🧩 Un éclat chute des serres de la harpie !","good");
-  }
+  if(e.name.includes("Harpie") && rng.rand()<0.10){ state.flags.fragments++; write("🧩 Un éclat chute des serres !","good"); }
   if(e.name.includes("Bandit")){
     state.flags.rumors = (state.flags.rumors||0)+1;
-    if(state.flags.rumors>=3 && !state.flags.bossUnlocked){ state.flags.bossUnlocked=true; write("🗡️ Tu apprends la cache du Chef Bandit… (événement rare débloqué)","info"); }
+    if(state.flags.rumors>=3 && !state.flags.bossUnlocked){ state.flags.bossUnlocked=true; write("🗡️ Tu apprends la cache du Chef Bandit…","info"); }
   }
   explore();
 }
@@ -357,10 +370,9 @@ function explore(initial=false){
   setStats(); ui.loc.textContent = state.location; ui.day.textContent=`Jour ${state.day} — ${state.time}`; clearChoices();
   if(!initial) setTime(); tickStatus(); if(state.hp<=0) return;
 
-  // ✅ Scénario : Porte ancienne si 3 fragments
+  // Scénario : Porte ancienne si 3 fragments (aux ruines)
   if(state.flags.fragments>=3 && !state.flags.doorDone && state.locationKey==='ruines'){ eventAncientDoor(); return; }
-
-  // Quête onirique unique
+  // Rêve unique
   if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
 
   const night = (state.time==='Nuit'||state.time==='Crépuscule');
@@ -379,6 +391,7 @@ function explore(initial=false){
     pool.push({label:`🧟‍♂️ ${night?'Rôdeuse':'Goule'} des roseaux`, act:()=>combat(mobTemplates.ghoul()), w:3});
     pool.push({label:'🐺 Meute furtive', act:()=>combat(mobTemplates.wolf()), w:2});
     pool.push({label:'🪤 Une corde traîtresse', act:()=>{ addScene('trap'); eventTrap(); continueOnly(); }, w:1});
+    pool.push({label:'🪵 Vieil ouvrage submergé', act:()=>{ addScene('bog'); eventBog(); }, w:1});
   } else if(zone==='clairiere'){
     pool.push({label:'🌿 Herboriste (potions/torche)', act:()=>{ addScene('herbalist'); eventHerbalist(); }, w:2});
     pool.push({label:'🎻 Barde (rumeurs)', act:()=>{ addScene('bard'); eventBard(); }, w:1});
@@ -386,11 +399,13 @@ function explore(initial=false){
     pool.push({label:'⛪ Autel moussu', act:()=>{ addScene('sanctuary'); eventSanctuary(); }, w:2});
     pool.push({label:'🛒 Caravane marchande', act:()=>{ addScene('caravan'); eventCaravan(); }, w:1});
     pool.push({label:'🥷 Bandits embusqués', act:()=>{ addScene('bandit'); combat(mobTemplates.bandit()); }, w:2});
+    pool.push({label:'⭐ Pierre de vœux', act:()=>{ addScene('wishing'); eventWishingStone(); }, w:1});
   } else if(zone==='colline'){
     pool.push({label:'🧙 Ermite (breloque)', act:()=>{ addScene('hermit'); eventHermit(); }, w:1});
     pool.push({label:'🏚️ Ruines à explorer', act:()=>{ addScene('ruins'); eventRuins(); }, w:2});
     pool.push({label:'🪶 Harpie des crêtes', act:()=>{ addScene('harpy'); combat(mobTemplates.harpy()); }, w:3});
     pool.push({label:'⚒️ Forgeron itinérant', act:()=>{ addScene('smith'); eventSmith(); }, w:1});
+    pool.push({label:'🌉 Vieux pont', act:()=>{ addScene('bridge'); eventBridge(); }, w:1});
   } else if(zone==='ruines'){
     pool.push({label:'🔎 Décombres', act:()=>{ addScene('ruins'); eventRuins(); }, w:3});
     pool.push({label:'⛰️ Éboulement', act:()=>{ addScene('ruins'); damage(rng.between(1,4),'Éboulement'); continueOnly(); }, w:1});
@@ -415,7 +430,7 @@ function explore(initial=false){
   all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
 }
 
-// ---------- Actions générales & nouvelles options ----------
+// ---------- Actions générales ----------
 function scout(){
   write("Tu observes les environs et marques des repères.", "info");
   state.flags.scouted = true;
@@ -472,26 +487,23 @@ function randomEncounter(){
   }
 }
 
-// ---------- PNJ / Événements développés ----------
+// ---------- PNJ / Événements ----------
+// Herboriste (torche, potions, soins, options de classe)
 function eventHerbalist(){
   addScene('herbalist'); write("🌿 Une herboriste t’accueille sous un auvent de lierre.");
   clearChoices();
   addChoice("Potion (3 or)", ()=>{
-    if(state.gold>=3){ changeGold(-3); state.potions++; write("Potion ajoutée.","good"); }
-    else write("Pas assez d'or.","warn");
+    if(state.gold>=3){ changeGold(-3); state.potions++; write("Potion ajoutée.","good"); } else write("Pas assez d'or.","warn");
     continueBtn(()=>explore());
   }, true);
   addChoice("Torche (4 or)", ()=>{
-    if(state.gold>=4){ changeGold(-4); state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte','🔥','common'); }
-    else write("Pas assez d'or.","warn");
+    if(state.gold>=4){ changeGold(-4); state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte','🔥','common'); } else write("Pas assez d'or.","warn");
     continueBtn(()=>explore());
   });
   addChoice("Antidote (3 or)", ()=>{
-    if(state.gold>=3){ changeGold(-3); addItem('Antidote','Soigne le poison','💉','common'); }
-    else write("Pas assez d'or.","warn");
+    if(state.gold>=3){ changeGold(-3); addItem('Antidote','Soigne le poison','💉','common'); } else write("Pas assez d'or.","warn");
     continueBtn(()=>explore());
   });
-  // Options de classe cohérentes
   if(state.cls==='Mystique'){
     addChoice("Scruter les herbes (WIS)", ()=>{
       const {total}=d20(state.attrs.WIS>=3?2:0);
@@ -502,43 +514,52 @@ function eventHerbalist(){
   }
   addChoice("Soin (2 or / gratuit si rép ≥ 25)", ()=>{
     const prix = state.rep>=25 ? 0 : 2;
-    if(state.gold>=prix){ if(prix>0) changeGold(-prix); heal(rng.between(6,12)); }
-    else write("Pas assez d'or.","warn");
+    if(state.gold>=prix){ if(prix>0) changeGold(-prix); heal(rng.between(6,12)); } else write("Pas assez d'or.","warn");
     continueBtn(()=>explore());
   });
   addChoice("Partir", ()=>continueBtn(()=>explore()));
 }
 
+// ⚒️ Forgeron — **FIX robuste** : chaque option termine proprement par un seul "Continuer".
 function eventSmith(){
   addScene('smith'); write('⚒️ Un forgeron itinérant tapote l’acier : "On peut améliorer."');
   clearChoices();
+
+  // helpers internes : garantissent une issue unique
+  const done = ()=>continueBtn(()=>explore());
+
   addChoice('Affûter (+1 ATQ, 5 or)', ()=>{
     if(state.gold>=5){ changeGold(-5); addItem('Épée affûtée','+1 attaque','🗡️','rare'); }
     else write("Pas assez d'or.",'warn');
-    continueBtn(()=>explore());
+    done();
   }, true);
+
   addChoice('Bouclier en fer (+2 CA, 6 or)', ()=>{
     if(state.gold>=6){ changeGold(-6); addItem('Bouclier en fer','+2 armure','🛡️','rare'); }
     else write("Pas assez d'or.",'warn');
-    continueBtn(()=>explore());
+    done();
   });
+
   addChoice('Cuir renforcé (+2 CA, 6 or)', ()=>{
     if(state.gold>=6){ changeGold(-6); addItem('Cuir renforcé','+2 armure souple','🧥','rare'); }
     else write("Pas assez d'or.",'warn');
-    continueBtn(()=>explore());
+    done();
   });
+
   addChoice('Bricoler (AGI) — garde affermie', ()=>{
     const {total}=d20(state.attrs.AGI>=3?2:0);
     if(total>=16){ write("La garde tient mieux : +1 CA (prochaine rencontre).","good"); state.status.push({type:'guard',name:'Garde affermie',dur:1}); }
     else { write("Raté : tu te coupes.",'warn'); damage(2,'Mauvaise manip'); }
-    continueBtn(()=>explore());
+    done();
   });
-  // ✅ Correction du "bug forgeron" : on remet une option “Discuter” propre avec sortie garantie
+
   addChoice('Discuter', ()=>{
     write('Il raconte : "Des runes s’illuminent aux ruines quand on rapproche trois éclats…"','info');
     gainXP(2);
-    continueBtn(()=>explore());
+    done();
   });
+
+  addChoice('Partir', done);
 }
 
 function eventBard(){
@@ -663,7 +684,7 @@ function eventHermit(){
   });
 }
 
-// 🛒 Caravane (nouveau)
+// 🛒 Caravane
 function eventCaravan(){
   addScene('caravan'); write("Une caravane déploie ses étals.");
   clearChoices();
@@ -683,6 +704,78 @@ function eventCaravan(){
     continueBtn(()=>explore());
   });
   addChoice("Partir", ()=>continueBtn(()=>explore()));
+}
+
+// 🌉 Pont : nouveaux choix cohérents
+function eventBridge(){
+  write("Un vieux pont grince. L’eau en contrebas est sombre.");
+  clearChoices();
+  addChoice("Payer un péage à un garde (2 or)", ()=>{
+    if(state.gold>=2){ changeGold(-2); write("Le garde laisse passer en te saluant.","info"); gainXP(2); }
+    else write("Tu n’as pas assez. Le garde t’ignore.","warn");
+    continueBtn(()=>explore());
+  }, true);
+  addChoice("Sauter (STR)", ()=>{
+    const {total}=d20(state.attrs.STR>=3?2:0);
+    if(total>=15){ write("Tu franchis la brèche sans encombre.","good"); gainXP(3); }
+    else { damage(rng.between(2,5),'Chute'); }
+    continueBtn(()=>explore());
+  });
+  addChoice("Équilibriste (AGI)", ()=>{
+    const {total}=d20(state.attrs.AGI>=3?2:0);
+    if(total>=15){ write("Tu passes sur la poutre fendue.","good"); }
+    else { damage(rng.between(1,4),'Glissade'); }
+    continueBtn(()=>explore());
+  });
+  if(hasItem('Corde solide')){
+    addChoice("Fixer une corde", ()=>{
+      write("Tu stabilises le passage pour d’autres voyageurs.","info"); rep(+1);
+      state.flags.rope=Math.max(0,(state.flags.rope||1)-1); removeItem('Corde solide');
+      continueBtn(()=>explore());
+    });
+  }
+  addChoice("Rebrousser chemin", ()=>continueBtn(()=>explore()));
+}
+
+// ⭐ Pierre de vœux
+function eventWishingStone(){
+  write("Une pierre lisse et tiède émet une pulsation discrète.");
+  clearChoices();
+  addChoice("Formuler un vœu (soin)", ()=>{
+    heal(rng.between(5,9)); rep(+1); continueBtn(()=>explore());
+  }, true);
+  addChoice("Formuler un vœu (richesse)", ()=>{
+    if(rng.rand()<0.6){ changeGold(rng.between(5,12)); } else { damage(2,'Caprice des runes'); }
+    continueBtn(()=>explore());
+  });
+  addChoice("Formuler un vœu (pouvoir)", ()=>{
+    const {total}=d20(state.attrs.WIS>=3?1:0);
+    if(total>=15){ state.skill.cd = 0; write("Tu sens l’énergie affluer : ta compétence est prête.","good"); }
+    else write("Silence… rien ne répond.","warn");
+    continueBtn(()=>explore());
+  });
+  addChoice("Ignorer", ()=>continueBtn(()=>explore()));
+}
+
+// 🪵 Tourbière (marais)
+function eventBog(){
+  write("Le sol cède un peu : tourbière traîtresse.");
+  clearChoices();
+  addChoice("Avancer prudemment", ()=>{
+    const bonus = (state.flags.rope?1:0);
+    const {total}=d20(bonus);
+    if(state.flags.rope) state.flags.rope=Math.max(0,state.flags.rope-1);
+    if(total>=13){ write("Tu t’en tires sans mal.","good"); }
+    else damage(rng.between(2,5),'Enlisement');
+    continueBtn(()=>explore());
+  }, true);
+  addChoice("Contourner (AGI)", ()=>{
+    const {total}=d20(state.attrs.AGI>=3?2:0);
+    if(total>=14){ write("Tu trouves un passage plus ferme.","info"); }
+    else { damage(2,'Fausse manœuvre'); }
+    continueBtn(()=>explore());
+  });
+  addChoice("Reculer", ()=>continueBtn(()=>explore()));
 }
 
 // Porte ancienne (scénario)
@@ -847,7 +940,7 @@ function gameOver(){
   addChoice("Recommencer", ()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); }, true);
 }
 
-// ---------- Reset bouton (dans play.html) ----------
+// ---------- Bouton Reset (HTML) ----------
 const btnReset=document.getElementById('btn-reset');
 if(btnReset) btnReset.onclick=()=>{ state=initialState(); ui.log.innerHTML=""; setup(true); };
 
