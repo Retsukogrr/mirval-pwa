@@ -1,4 +1,4 @@
-// === Aventurier de Mirval — game.js (v10 HUB & Mini-Boss, complet) ===
+// === Aventurier de Mirval — game.js (v10 HUB & Mini-Boss, rencontres réactives) ===
 console.log("game.js v10 chargé");
 
 // === Garder l’écran éveillé (QoL mobile) ===
@@ -72,7 +72,10 @@ const scenes = {
   sanctuaire:`<svg width="260" height="140"><rect width="260" height="140" fill="#1d1d2c"/><rect x="90" y="40" width="80" height="70" fill="#6b6b90"/><text x="130" y="24" fill="#fff" text-anchor="middle" font-size="14">Sanctuaire</text></svg>`,
   guard:`<svg width="260" height="140"><rect width="260" height="140" fill="#18212f"/><rect x="100" y="40" width="60" height="60" fill="#3b82f6"/><text x="130" y="118" fill="#fff" text-anchor="middle" font-size="12">Garde</text></svg>`,
   smuggler:`<svg width="260" height="140"><rect width="260" height="140" fill="#291a2a"/><rect x="100" y="40" width="60" height="60" fill="#ef4444"/><text x="130" y="118" fill="#fff" text-anchor="middle" font-size="12">Contrebande</text></svg>`,
-  priest:`<svg width="260" height="140"><rect width="260" height="140" fill="#1d1b2e"/><rect x="108" y="46" width="44" height="44" fill="#eab308"/><text x="130" y="118" fill="#fff" text-anchor="middle" font-size="12">Prêtre</text></svg>`,
+  pilgrim:`<svg width="260" height="140"><rect width="260" height="140" fill="#1d2231"/><rect x="110" y="50" width="40" height="40" fill="#a3e635"/><text x="130" y="120" fill="#fff" text-anchor="middle" font-size="12">Pèlerin</text></svg>`,
+  doe:`<svg width="260" height="140"><rect width="260" height="140" fill="#2a2016"/><circle cx="130" cy="72" r="28" fill="#c4a484"/><text x="130" y="118" fill="#fff" text-anchor="middle" font-size="12">Biche</text></svg>`,
+  locket:`<svg width="260" height="140"><rect width="260" height="140" fill="#222525"/><circle cx="130" cy="72" r="20" fill="#fbbf24"/><text x="130" y="118" fill="#fff" text-anchor="middle" font-size="12">Médaillon</text></svg>`,
+  caravan:`<svg width="260" height="140"><rect width="260" height="140" fill="#1f2229"/><rect x="70" y="60" width="120" height="40" fill="#9ca3af"/><text x="130" y="118" fill="#fff" text-anchor="middle" font-size="12">Caravane</text></svg>`,
   default:`<svg width="260" height="140"><rect width="260" height="140" fill="#0f172a"/><text x="130" y="76" fill="#94a3b8" text-anchor="middle" font-size="14">...</text></svg>`
 };
 function zoneScene(key){
@@ -123,7 +126,7 @@ function addItem(name,desc){ if(!hasItem(name)){ state.inventory.push({name,desc
 function hasItem(name){ return state.inventory.some(i=>i.name===name); }
 function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
 
-// === Statuts (poison/saignement/ralenti) ===
+// Statuts
 function tickStatus(){
   state.status = state.status.filter(st=>{
     if(st.type==='poison'){ const dmg=rng.between(1,2); damage(dmg,"Poison"); st.dur--; }
@@ -225,7 +228,6 @@ function afterCombat(){
   else if(r<0.45) { state.potions++; write("Tu trouves une potion.","good"); }
   else if(r<0.5 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple");
 
-  // Rumeurs → chef bandit (progression vers boss)
   if(e.name.includes("Bandit")){
     state.flags.rumors = (state.flags.rumors||0)+1;
     if(state.flags.rumors>=3 && !state.flags.bossUnlocked){
@@ -244,7 +246,6 @@ const mobTemplates = {
   harpy: ()=>({ name:"Harpie du vent", hp:14, maxHp:14, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'bleed', scene:'harpy' }),
   ghoul: ()=>({ name:"Goule des roseaux", hp:13, maxHp:13, ac:12, hitMod:3, tier:2, dotChance:0.25, dotType:'poison', scene:'ghoul' }),
   chief: ()=>({ name:"Chef Bandit", hp:24, maxHp:24, ac:14, hitMod:5, tier:3, dotChance:0.3, dotType:'bleed', scene:'boss' }),
-  // Mini-boss scénarisés (pour fragments)
   guardian:`Gardienne des Roseaux`,
   matriarch:`Harpie Matriarche`,
   specter:`Spectre des Ruines`,
@@ -294,13 +295,8 @@ function explore(initial=false){
   tickStatus();
   if(state.hp<=0) return;
 
-  // visuel de zone à chaque tour
   addScene(zoneScene(state.locationKey));
-
-  // événement onirique unique
   if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
-
-  // Si on est au Village → hub dédié (pas de tirage aléatoire)
   if(state.locationKey==='village'){ return villageHub(); }
 
   const zone = state.locationKey;
@@ -315,8 +311,8 @@ function explore(initial=false){
     pool.push({label:'Aider un captif', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); singleContinue(); } }, w:1});
     pool.push({label:'Traquer une goule', act:()=>combat(mobTemplates.ghoul()), w:3});
     pool.push({label:'Affronter un loup', act:()=>combat(mobTemplates.wolf()), w:2});
+    pool.push({label:'Biche prise au collet', act:eventRescueDoe, w:1});
     pool.push({label:'Tomber sur un piège', act:()=>{ eventTrap(); singleContinue(); }, w:1});
-    // Mini-boss 1 si pas encore vaincu
     if(!state.flags.frag1) pool.push({label:'Rumeur: Gardienne des Roseaux', act:()=>eventMiniBoss(1), w:1});
   } else if(zone==='clairiere'){
     pool.push({label:'Croiser une herboriste', act:eventHerbalist, w:2});
@@ -324,17 +320,18 @@ function explore(initial=false){
     pool.push({label:'Chasser un sanglier', act:()=>combat(mobTemplates.boar()), w:2});
     pool.push({label:'Autel moussu', act:eventSanctuary, w:1});
     pool.push({label:'Rencontrer un forgeron', act:eventSmith, w:1});
+    pool.push({label:'Pèlerin perdu', act:eventEscortPilgrim, w:1});
+    pool.push({label:'Médaillon égaré', act:eventReturnLocket, w:1});
   } else if(zone==='colline'){
     pool.push({label:'Rencontrer un ermite', act:eventHermit, w:2});
-    pool.push({label:'Explorer des ruines', act:()=>gotoZone('ruines'), w:1});
+    pool.push({label:'Sentier vers les ruines', act:()=>gotoZone('ruines'), w:1});
     pool.push({label:'Affronter une harpie', act:()=>combat(mobTemplates.harpy()), w:3});
-    // Mini-boss 2
     if(!state.flags.frag2) pool.push({label:'Nid de la Matriarche', act:()=>eventMiniBoss(2), w:1});
+    pool.push({label:'Convoi marchand', act:eventMerchantAmbush, w:1});
   } else if(zone==='ruines'){
     pool.push({label:'Fouiller les décombres', act:eventRuins, w:3});
     pool.push({label:'Écarter des pierres instables', act:()=>{ if(d20().total<10) damage(rng.between(1,4),'Éboulement'); else write("Tu avances prudemment."); singleContinue(); }, w:1});
     pool.push({label:'Combattre des bandits', act:()=>combat(mobTemplates.bandit()), w:2});
-    // Mini-boss 3 (besoin de torche si dans la partie basse)
     if(!state.flags.frag3) pool.push({label:'Voix dans la pierre', act:()=>eventMiniBoss(3), w:1});
   } else if(zone==='grotte'){
     pool.push({label:'Affronter une goule ancienne', act:()=>combat({name:'Goule ancienne',hp:18,maxHp:18,ac:13,hitMod:5,tier:3,dotChance:0.35,dotType:'poison', scene:'ghoul'}), w:3});
@@ -350,7 +347,6 @@ function explore(initial=false){
               {label:'→ Ruines', act:()=>gotoZone('ruines'), w: 1},
               {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer. Trouve une torche.','warn'), singleContinue()), w:1} ].filter(x=>x.w>0);
 
-  // 4 actions au total (2 bases + 1-2 dyn + 0-1 nav)
   const dyn = pickWeighted(pool, 2 + (rng.rand()<0.5?1:0));
   const navPick = pickWeighted(nav, 1);
   const all = pickWeighted([...base, ...dyn, ...navPick], 4);
@@ -380,15 +376,15 @@ function villageHub(){
   addChoice("Chapelle (bénédiction)", eventVillageChapel);
   addChoice("Forge (améliorations)", eventVillageForge);
 
-  // Quêtes (réputation-gated)
   if(!state.flags.guardQuest && state.rep>=5)
     addChoice("Aider la Garde (quête)", questHelpGuard);
   if(!state.flags.smugglerQuest && state.rep<=-5)
     addChoice("Trafic des contrebandiers (quête)", questSmuggler);
+
   addChoice("Quitter le village", ()=>{ write("Tu quittes le brouhaha pour la nature."); singleContinue(()=>gotoZone('clairiere')); });
 }
 
-// === Village: Marché, Taverne, Chapelle, Forge ===
+// Village: sous-événements
 function eventVillageMarket(){
   addScene('zone_village');
   write("🛒 Étals variés : potions, rations et bric-à-brac.");
@@ -421,7 +417,7 @@ function eventVillageTavern(){
   addChoice("Quitter", ()=>singleContinue(villageHub));
 }
 function eventVillageChapel(){
-  addScene('priest');
+  addScene('sanctuaire');
   write("⛪ La chapelle exhale un parfum d’encens.");
   clearChoices();
   addChoice("Recevoir une bénédiction (réputation ≥ 5)", ()=>{
@@ -495,19 +491,23 @@ function questSmuggler(){
 }
 
 // === Actions générales ===
+// → Quand “quelque chose s’approche”, on déclenche FORCÉMENT un combat/PNJ (plus de vide).
 function searchArea(){
   const bonus = state.attrs.WIS>=3?1:0;
   const {total} = d20(bonus);
-  if(total>=18){ write("🔑 Recherche exceptionnelle : tu trouves un coffre scellé.","good"); chest(); }
-  else if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); }
-  else if(total>=8){ write("Des traces fraîches… une rencontre approche."); if(rng.rand()<0.5) randomEncounter(); }
-  else { write("Aïe ! Ronce traîtresse.","bad"); damage(rng.between(1,3),"Ronces"); }
-  singleContinue();
+  if(total>=18){ write("🔑 Recherche exceptionnelle : tu trouves un coffre scellé.","good"); chest(); singleContinue(); return; }
+  if(total>=12){ write("✨ Quelques pièces sous une pierre.","good"); changeGold(rng.between(2,6)); singleContinue(); return; }
+  // Approche garantie :
+  write("…Tu repères des traces fraîches. Quelque chose approche !");
+  forcedEncounter(); // ⟵ combat/PNJ immédiat
 }
 function rest(){
-  if(rng.rand()<0.35){ write("Quelque chose approche pendant ton repos…","warn"); randomEncounter(); }
-  else { heal(rng.between(4,8)); write("Tu dors un peu. Ça fait du bien.","good"); }
-  singleContinue();
+  if(rng.rand()<0.35){
+    write("Quelque chose approche pendant ton repos…","warn");
+    forcedEncounter(); // ⟵ interruption = rencontre immédiate
+  } else {
+    heal(rng.between(4,8)); write("Tu dors un peu. Ça fait du bien.","good"); singleContinue();
+  }
 }
 function useItemMenu(){
   clearChoices();
@@ -524,47 +524,58 @@ function chest(){
   else if(r>48){ changeGold(rng.between(7,15)); }
   else { write("💥 Piège !","bad"); damage(rng.between(3,6),"Piège"); }
 }
-function randomEncounter(){
-  const roll=rng.rand(); const zone=state.locationKey;
-  if(roll<0.55) {
-    if(zone==='marais') combat(mobTemplates.ghoul());
-    else if(zone==='clairiere') combat(mobTemplates.bandit());
-    else if(zone==='ruines') combat(mobTemplates.bandit());
-    else combat(mobTemplates.harpy());
+
+// === Rencontres : FORCÉES et aléatoires ===
+function forcedEncounter(){
+  // 60% combat, 40% PNJ/événement ; pondéré par zone
+  const roll = rng.rand();
+  const zone = state.locationKey;
+  if(roll < 0.6){
+    // Combat selon zone
+    if(zone==='marais') return combat(mobTemplates.ghoul());
+    if(zone==='clairiere') return combat(mobTemplates.bandit());
+    if(zone==='ruines') return combat(mobTemplates.bandit());
+    return combat(mobTemplates.harpy());
   } else {
-    [eventSanctuary,eventHerbalist,eventSmith,eventHermit][rng.between(0,3)]();
+    // PNJ/événement utile
+    const events = [eventHerbalist,eventSmith,eventHermit,eventSanctuary,eventRescueDoe,eventEscortPilgrim,eventReturnLocket,eventMerchantAmbush];
+    return events[rng.between(0,events.length-1)]();
   }
 }
+function randomEncounter(){
+  // Conservée pour d’autres chemins ; garde le comportement agressif (déclenchement direct)
+  return forcedEncounter();
+}
 
-// === PNJ & événements étendus ===
+// === PNJ & événements étendus (avec gains de réputation) ===
 function eventHerbalist(){
-  addScene('herbalist'); write("🌿 Une herboriste te fait signe."); clearChoices();
+  addScene('herbalist'); write("🌿 Une herboriste s’approche, panier d’herbes en main."); clearChoices();
   addChoice("S’approcher", ()=>{
     if(state.rep<-20){ write("Elle se détourne : « Je ne sers pas les cruels. »",'warn'); rep(-1); return singleContinue(); }
     const cost=(state.rep>20?2:3);
-    if(state.gold>=cost){ changeGold(-cost); heal(rng.between(6,12)); state.flags.metHerbalist=true; state.flags.herbalistTrust=(state.flags.herbalistTrust||0)+1; }
+    if(state.gold>=cost){ changeGold(-cost); heal(rng.between(6,12)); state.flags.herbalistTrust=(state.flags.herbalistTrust||0)+1; }
     else write("Tu n'as pas assez d'or.","warn");
     singleContinue();
   }, true);
   addChoice("Marchander", ()=>{
     const {total}=d20(state.attrs.WIS>=3?2:0);
-    if(total>=15){ heal(rng.between(4,8)); write('Elle sourit : « À prix d’ami. »','good'); state.flags.herbalistTrust=(state.flags.herbalistTrust||0)+1; }
+    if(total>=15){ heal(rng.between(4,8)); write('« À prix d’ami. »','good'); state.flags.herbalistTrust=(state.flags.herbalistTrust||0)+1; }
     else write('Elle refuse.','warn');
     singleContinue();
   });
   if((state.flags.herbalistTrust||0)>=2 && !state.flags.herbalGift){
-    addChoice("Recevoir un baume (unique)", ()=>{
-      state.flags.herbalGift=true; addItem("Baume vital","Soigne 6 PV automatiquement si < 6 PV (1x)");
+    addChoice("Offre un baume (unique)", ()=>{
+      state.flags.herbalGift=true; addItem("Baume vital","Soigne 6 PV automatiquement si < 6 PV (1x)"); rep(+1);
       singleContinue();
     });
   }
   addChoice("Partir", singleContinue);
 }
 function eventSmith(){
-  addScene('forgeron'); write('⚒️ Un forgeron itinérant inspecte tes armes.'); clearChoices();
+  addScene('forgeron'); write('⚒️ Un forgeron surgit du sentier et te salue.'); clearChoices();
   addChoice('Acheter une torche (3 or)', ()=>{
     if(state.flags.torch){ write("Tu as déjà une torche.",'warn'); return singleContinue(); }
-    if(state.gold>=3){ changeGold(-3); state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte'); }
+    if(state.gold>=3){ changeGold(-3); state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte'); rep(+1); }
     else write("Pas assez d'or.",'warn'); singleContinue();
   }, true);
   addChoice('Affûter l’épée (5 or)', ()=>{
@@ -577,10 +588,10 @@ function eventSmith(){
     if(state.gold>=6){ changeGold(-6); addItem('Bouclier en fer','+2 armure'); }
     else write("Pas assez d'or.",'warn'); singleContinue();
   });
-  addChoice('Discuter', ()=>{ gainXP(3); write("Le forgeron parle d’une planque de bandits.","info"); singleContinue(); });
+  addChoice('Discuter', ()=>{ gainXP(3); write("« Si tu vois la Garde, dis-leur qu’on manque d’acier. »","info"); singleContinue(); });
 }
 function eventBard(){
-  addScene('barde'); write('🎻 Un barde propose une chanson.'); clearChoices();
+  addScene('barde'); write('🎻 Un barde te rejoint d’un pas léger.'); clearChoices();
   addChoice('Écouter', ()=>{
     if(rng.rand()<0.7){ heal(rng.between(3,7)); write("La mélodie t’apaise.","good"); }
     else { changeGold(-2); write('…quelqu’un fait les poches.','warn'); }
@@ -593,7 +604,7 @@ function eventRuins(){
   addChoice('Fouiller', ()=>{
     const {total}=d20(state.attrs.WIS>=3?1:0);
     if(total>=16){
-      if(!state.flags.torch){ state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte'); }
+      if(!state.flags.torch){ state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte'); rep(+1); }
       else { changeGold(rng.between(5,9)); }
     } else if(total>=10){ chest(); } else { damage(rng.between(2,5),'Éboulement'); }
     singleContinue();
@@ -601,17 +612,17 @@ function eventRuins(){
   addChoice('Partir', singleContinue);
 }
 function eventPeasant(){
-  addScene('peasant'); write('🧑‍🌾 Un paysan enchaîné appelle à l’aide.'); clearChoices();
+  addScene('peasant'); write('🧑‍🌾 Un paysan enchaîné appelle à l’aide et s’avance tant bien que mal.'); clearChoices();
   addChoice('Le libérer', ()=>{
     const {total}=d20(state.attrs.STR>=3?2:0);
-    if(total>=14){ write('Les chaînes cèdent.','good'); rep(+5); state.flags.peasantSaved=true; state.quests.side.push({title:'Le paysan reconnaissant',state:'En attente'}); if(!state.flags.villageUnlocked){ state.flags.villageUnlocked=true; write("Le paysan t’indique la route du village.","info"); } }
+    if(total>=14){ write('Les chaînes cèdent.','good'); rep(+5); state.flags.peasantSaved=true; state.quests.side.push({title:'Le paysan reconnaissant',state:'En attente'}); if(!state.flags.villageUnlocked){ state.flags.villageUnlocked=true; write("Il t’indique la route du village.","info"); } }
     else { damage(rng.between(1,4),'Effort'); }
     singleContinue();
   }, true);
   addChoice('L’ignorer', ()=>{ rep(-3); singleContinue(); });
 }
 function eventSanctuary(){
-  addScene('sanctuaire'); write('⛪ Un ancien sanctuaire se dévoile.'); clearChoices();
+  addScene('sanctuaire'); write('⛪ Un ancien sanctuaire se dévoile et une silhouette t’approche.'); clearChoices();
   addChoice('Prier', ()=>{
     const night = state.time==='Nuit' || state.time==='Crépuscule'; const {total}=d20(); const t=total+(night?1:0);
     if(t>=15){ heal(rng.between(6,12)); rep(+2); }
@@ -629,9 +640,9 @@ function eventSanctuary(){
   addChoice('Partir', singleContinue);
 }
 function eventHermit(){
-  addScene('hermit'); write('🧙 Un ermite t’observe en silence.'); clearChoices();
+  addScene('hermit'); write('🧙 Un ermite s’avance, la barbe au vent.'); clearChoices();
   addChoice('Accepter sa décoction', ()=>{
-    if(rng.rand()<0.6){ heal(rng.between(5,10)); gainXP(3); } else { damage(rng.between(2,5),'Nausée'); }
+    if(rng.rand()<0.6){ heal(rng.between(5,10)); gainXP(3); rep(+1); } else { damage(rng.between(2,5),'Nausée'); }
     singleContinue();
   }, true);
   addChoice('Acheter une breloque (5 or)', ()=>{
@@ -646,49 +657,88 @@ function eventTrap(){ write('🪤 Une corde s’enroule à ta cheville !'); cons
 function eventOracle(){ write('🔮 Une voyante apparaît dans tes rêves.'); clearChoices(); addChoice('Écouter la prophétie', ()=>{ write('« Quand trois éclats seront réunis, la porte s’ouvrira. »','info'); state.flags.oracleSeen=true; singleContinue(); }, true); }
 function eventRumor(){ write("🔥 On murmure qu’un Chef Bandit recrute au Nord…",'info'); state.flags.rumors=(state.flags.rumors||0)+1; if(state.flags.rumors>=3){ state.flags.bossUnlocked=true; write("🗡️ Tu as assez d’indices pour traquer le Chef Bandit.","good"); } }
 
+// ——— Nouveaux événements “héroïques” (réputation +) ———
+// 1) Sauver une biche prise au collet
+function eventRescueDoe(){
+  addScene('doe'); write("🦌 Une biche terrorisée se débat dans un collet et t’aperçoit.");
+  clearChoices();
+  addChoice("Libérer doucement", ()=>{
+    const {total}=d20(state.attrs.WIS>=3?2:0);
+    if(total>=13){ write("La biche s’échappe et te jette un dernier regard."); rep(+2); gainXP(4); }
+    else { write("Tu desserres le collet, mais te blesses aux mains."); damage(rng.between(1,3),"Blessures"); rep(+1); }
+    singleContinue();
+  }, true);
+  addChoice("Ignorer", ()=>{ rep(-1); singleContinue(); });
+}
+// 2) Escorter un pèlerin perdu jusqu’au sanctuaire
+function eventEscortPilgrim(){
+  addScene('pilgrim'); write("🕯️ Un pèlerin égaré s’approche et te supplie de le guider.");
+  clearChoices();
+  addChoice("L’escorter", ()=>{
+    const risk = d20().total;
+    if(risk<10){ combat(mobTemplates.bandit()); }
+    else { write("Le trajet se déroule sans encombres. Le pèlerin prie pour toi."); rep(+3); gainXP(5); singleContinue(); }
+  }, true);
+  addChoice("Refuser", ()=>{ rep(-2); singleContinue(); });
+}
+// 3) Rendre un médaillon égaré
+function eventReturnLocket(){
+  addScene('locket'); write("🟡 Tu trouves un médaillon ; une vieille femme accourt vers toi.");
+  clearChoices();
+  addChoice("Le rendre", ()=>{
+    write("Ses yeux s’illuminent : « Merci… c’était à mon fils. »");
+    rep(+2); changeGold(+2); gainXP(2); singleContinue();
+  }, true);
+  addChoice("Le garder", ()=>{ write("…Tu le glisses dans ta poche."); rep(-2); addItem("Médaillon terni","Ça ne vaut pas grand-chose."); singleContinue(); });
+}
+// 4) Défendre une caravane attaquée
+function eventMerchantAmbush(){
+  addScene('caravan'); write("🚚 Des cris ! Une caravane est prise en embuscade. Les bandits s’avancent !");
+  clearChoices();
+  addChoice("Intervenir", ()=>{
+    combat(mobTemplates.bandit());
+    const _after = afterCombat;
+    afterCombat = function(){
+      _after();
+      write("Les marchands t’offrent une bourse et leur gratitude.");
+      changeGold(+5); rep(+2); gainXP(4);
+      afterCombat = _after;
+    };
+  }, true);
+  addChoice("Observer de loin", ()=>{ rep(-1); singleContinue(); });
+}
+
 // === Mini-Boss (Fragments scénarisés) ===
 function eventMiniBoss(idx){
   if(idx===1){
-    write("🌫️ Les roseaux s’écartent… une présence veille.");
+    write("🌫️ Les roseaux s’écartent… la Gardienne s’avance vers toi.");
     combat(miniBoss(mobTemplates.guardian));
     const _after = afterCombat;
     afterCombat = function(){
       _after();
-      if(!state.flags.frag1){
-        state.flags.frag1=true; state.flags.fragments++; state.quests.artifacts.state=`En cours`;
-        write(`✨ Fragment des Roseaux acquis ! (${state.flags.fragments}/3)`,'good');
-      }
+      if(!state.flags.frag1){ state.flags.frag1=true; state.flags.fragments++; state.quests.artifacts.state=`En cours`; write(`✨ Fragment des Roseaux acquis ! (${state.flags.fragments}/3)`,'good'); rep(+1); }
       afterCombat = _after;
     };
   }
   else if(idx===2){
-    write("💨 Un nid perché domine la vallée : la Matriarche se déploie !");
+    write("💨 Depuis son nid, la Matriarche plonge sur toi.");
     combat(miniBoss(mobTemplates.matriarch));
     const _after2 = afterCombat;
     afterCombat = function(){
       _after2();
-      if(!state.flags.frag2){
-        state.flags.frag2=true; state.flags.fragments++; state.quests.artifacts.state=`En cours`;
-        write(`✨ Fragment des Vents acquis ! (${state.flags.fragments}/3)`,'good');
-      }
+      if(!state.flags.frag2){ state.flags.frag2=true; state.flags.fragments++; state.quests.artifacts.state=`En cours`; write(`✨ Fragment des Vents acquis ! (${state.flags.fragments}/3)`,'good'); }
       afterCombat = _after2;
     };
   }
   else { // 3
     if(!state.flags.torch){ write("Il te faut une torche pour descendre dans l’obscurité.",'warn'); return singleContinue(); }
-    write("🕯️ Un froid te traverse : un spectre s’extrait des pierres.");
+    write("🕯️ Un froid te traverse : un spectre se matérialise et avance sur toi.");
     combat(miniBoss(mobTemplates.specter));
     const _after3 = afterCombat;
     afterCombat = function(){
       _after3();
-      if(!state.flags.frag3){
-        state.flags.frag3=true; state.flags.fragments++; state.quests.artifacts.state=`En cours`;
-        write(`✨ Fragment des Profondeurs acquis ! (${state.flags.fragments}/3)`,'good');
-      }
-      if(state.flags.fragments>=3){
-        state.quests.artifacts.state='Complet';
-        write("Les trois fragments vibrent… la porte des Ruines peut s’ouvrir.","info");
-      }
+      if(!state.flags.frag3){ state.flags.frag3=true; state.flags.fragments++; state.quests.artifacts.state=`En cours`; write(`✨ Fragment des Profondeurs acquis ! (${state.flags.fragments}/3)`,'good'); }
+      if(state.flags.fragments>=3){ state.quests.artifacts.state='Complet'; write("Les trois fragments vibrent… la porte des Ruines peut s’ouvrir.","info"); }
       afterCombat = _after3;
     };
   }
@@ -750,7 +800,7 @@ function initialState(){
       metHerbalist:false, metSmith:false, peasantSaved:false,
       fragments:0, frag1:false, frag2:false, frag3:false,
       bossUnlocked:false, torch:false, oracleSeen:false,
-      ruinsUnlocked:true, villageUnlocked:true, // hub débloqué d’emblée (ou passe à false si tu veux plus de gating)
+      ruinsUnlocked:true, villageUnlocked:true,
       rumors:0, charm:0, herbalistTrust:0, herbalGift:false,
       smithLevel:1, smithXp:0,
       guardQuest:false, smugglerQuest:false
