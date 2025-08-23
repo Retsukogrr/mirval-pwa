@@ -1,4 +1,4 @@
-// === Aventurier de Mirval — game.js (v10 densifié & combats/PNJ garantis) ===
+// === Aventurier de Mirval — game.js (v10 complet, combats/PNJ réparés) ===
 console.log("game.js v10 chargé");
 
 // ---------- Garder l’écran éveillé ----------
@@ -44,15 +44,14 @@ const ui = {
 
 // ---------- UI helpers ----------
 function write(text, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=text; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
-let _eventLocked=false;
-function clearChoices(){ ui.choices.innerHTML=""; _eventLocked=false; }
+function clearChoices(){ ui.choices.innerHTML=""; }
 function addChoice(label, handler, primary=false){
   const btn=document.createElement('button');
   if(primary) btn.classList.add('btn-primary');
   btn.textContent = label;
   btn.addEventListener('click', ()=>{
-    if(_eventLocked) return;
-    _eventLocked = true;
+    if(btn.disabled) return;
+    btn.disabled = true; // anti double-clic local
     try{ handler(); }catch(e){ console.error(e); write(`⚠️ ${e.message}`,'warn'); }
   });
   ui.choices.appendChild(btn);
@@ -136,7 +135,8 @@ function combatTurn(){
     const atk=d20(e.hitMod||3).total; const armor=playerDef()+bonus;
     if(atk>=armor){ const dmg=Math.max(0,rng.between(1,3+(e.tier||2))-2-bonus); write(`Parade partielle, -${dmg} PV`,'warn'); damage(dmg,e.name); }
     else write('Tu pares complètement !','good');
-    enemyAttack();
+    enemyAttack(); 
+    combatTurn(); // ✅ important
   });
   addChoice('✨ Compétence', ()=>{
     if(state.skill.cd){ write('Compétence en recharge.','warn'); return combatTurn(); }
@@ -211,7 +211,6 @@ function afterCombat(){
     state.flags.rumors = (state.flags.rumors||0)+1;
     if(state.flags.rumors>=3 && !state.flags.bossBanditUnlocked){ state.flags.bossBanditUnlocked = true; write('🗡️ Tu apprends la cache du Chef Bandit.','info'); }
   }
-  // reset compteur “sans rencontre”
   state.noEncounterStreak = 0;
   explore();
 }
@@ -263,12 +262,12 @@ function searchArea(){
   const {total}=d20(bonus);
   if(total>=18){ write('🔑 Coffre scellé repéré.','good'); chest(); state.noEncounterStreak=0; }
   else if(total>=12){ write('✨ Quelques pièces sous une pierre.','good'); changeGold(rng.between(2,6)); state.noEncounterStreak++; }
-  else if(total>=8){ write('Des traces fraîches… une rencontre approche.'); forceEncounter(); }
+  else if(total>=8){ write('Des traces fraîches… une rencontre approche.'); randomEncounter(); }
   else { write('Aïe ! Ronce traîtresse.','bad'); damage(rng.between(1,3),'Ronces'); state.noEncounterStreak++; }
   continueBtn();
 }
 function rest(){
-  if(rng.rand()<0.35){ write('Quelque chose approche pendant ton repos…','warn'); forceEncounter(); }
+  if(rng.rand()<0.35){ write('Quelque chose approche pendant ton repos…','warn'); randomEncounter(); }
   else { heal(rng.between(4,8)); write('Tu dors un peu. Ça fait du bien.','good'); state.noEncounterStreak++; }
   continueBtn();
 }
@@ -293,14 +292,12 @@ function randomEncounter(){
     const zone=state.locationKey;
     if(zone==='marais') combat(mobs.ghoul());
     else if(zone==='clairiere') combat(mobs.bandit());
+    else if(zone==='ruines') combat(mobs.bandit());
     else combat(mobs.harpy());
   }else{
     [eventSanctuary,eventHerbalist,eventSmith,eventHermit,eventTrader,eventOldMap][rng.between(0,5)]();
   }
   state.noEncounterStreak=0;
-}
-function forceEncounter(){ // pour garantir une rencontre
-  randomEncounter();
 }
 
 // PNJ & Événements
@@ -448,15 +445,13 @@ function explore(initial=false){
 
   const zone = state.locationKey;
 
-  // Base
   const base = [
     { label:"Fouiller", act:searchArea, w:2 },
     { label:"Se reposer", act:rest, w:1 },
     { label:"Utiliser un objet", act:useItemMenu, w:1 },
-    { label:"Rencontre immédiate", act:forceEncounter, w:2 } // 👈 Nouvel accès direct
+    { label:"Rencontre immédiate", act:randomEncounter, w:2 }
   ];
 
-  // Pool dynamique par zone (poids augmentés)
   let pool=[];
   if(zone==='marais'){
     pool.push({label:'Suivre des feux-follets', act:eventSanctuary, w:2});
@@ -496,22 +491,6 @@ function explore(initial=false){
 
   if(state.flags.bossBanditUnlocked) pool.push({label:'Traquer le Chef Bandit', act:combatBossBandit, w:2});
 
-  // Tirage : garantir au moins 1 dynamique
-  const dynCount = Math.min(3, pool.length);
-  let dyn = pickWeighted(pool, dynCount);
-  if(dyn.length===0 && pool.length>0) dyn = [pool[Math.floor(rng.rand()*pool.length)]];
-
-  // Anti “sécheresse” : si 2 tours sans rencontre → forcer un combat
-  if(state.noEncounterStreak>=2){
-    const forced =
-      zone==='marais' ? ()=>combat(mobs.ghoul()) :
-      zone==='clairiere' ? ()=>combat(mobs.bandit()) :
-      zone==='colline' ? ()=>combat(mobs.harpy()) :
-      zone==='ruines' ? ()=>combat(mobs.bandit()) :
-      ()=>combat(mobs.wolf());
-    dyn.unshift({label:'(Urgent) Une silhouette surgit !', act:forced, w:99});
-  }
-
   const nav=[
     {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
     {label:'→ Clairière', act:()=>gotoZone('clairiere'), w:1},
@@ -520,17 +499,17 @@ function explore(initial=false){
     {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer.','warn'), continueBtn()), w:1}
   ].filter(x=>x.w>0);
 
-  // Compose l’écran (4 choix max) : base + AU MOINS 1 dyn + nav
+  // Tirage
+  const dyn = pickWeighted(pool, Math.min(3,pool.length));
   const candidates = [...base, ...dyn, ...nav];
   const shown = pickWeighted(candidates, Math.min(5, candidates.length));
-  // Garantie dynamique visible : si aucun des 'shown' n'est issu de 'dyn', on insère le premier dyn
+
+  // Assurer AU MOINS une rencontre dynamique visible
   const dynLabels = new Set(dyn.map(d=>d.label));
-  if(!shown.some(s=>dynLabels.has(s.label)) && dyn.length>0){
-    shown[0] = dyn[0];
-  }
+  if(!shown.some(s=>dynLabels.has(s.label)) && dyn.length>0) shown[0] = dyn[0];
+
   shown.forEach((c,i)=> addChoice(c.label, c.act, i===0));
 
-  // Si on arrive ici sans rencontre déclenchée immédiatement, on incrémente le streak
   state.noEncounterStreak++;
 }
 
@@ -604,7 +583,6 @@ function initialState(){
     quests:{ main:{title:'Le Chef Bandit',state:'En cours'}, side:[], artifacts:{title:'Fragments d’artefact (0/3)',state:'En cours'} },
     achievements:{}, lastLabels:[],
     inCombat:false, enemy:null, skill:{name:'',cooldown:0,cd:0,desc:'',use:()=>{}},
-    // anti “sécheresse” :
     noEncounterStreak: 0
   };
 }
