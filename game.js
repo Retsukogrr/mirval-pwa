@@ -1026,3 +1026,78 @@ function tickStatus(){
     return st.dur>0 && state.hp>0;
   });
 }
+/* ====== PATCH DÉMARRAGE SÛR (v10++ hotfix) ====== */
+
+// 1) Afficher les erreurs JS directement dans le log (et console)
+window.addEventListener('error', (e)=>{
+  console.error('JS error:', e.message, e.filename, e.lineno);
+  try {
+    if (ui && ui.log) {
+      write(`⚠️ <b>Erreur JS</b> : ${e.message}`, 'warn');
+    }
+  } catch(_) {}
+});
+
+// 2) “Kickstarter” : si rien ne s’affiche, on force le menu de classe
+(function safeKickstart(){
+  const tryKick = (reason) => {
+    try {
+      // Rien dans le log + aucun bouton de choix → on relance le setup
+      const noLog = !ui.log || ui.log.childElementCount === 0;
+      const noChoices = !ui.choices || ui.choices.children.length === 0;
+      if (noLog && noChoices) {
+        console.warn('[Mirval] Kickstart:', reason);
+        // Déverrouille toute action bloquée
+        if (typeof _eventLocked !== 'undefined') _eventLocked = false;
+        // Force un démarrage propre
+        if (typeof setup === 'function') {
+          setup(true);
+        }
+        // Sécurité : si le setup ne pousse pas le menu de classe, on le force
+        setTimeout(()=>{
+          const classesValides = ['Guerrier','Voleur','Paladin','Rôdeur','Mystique'];
+          if (!state || !classesValides.includes(state.cls)) {
+            if (ui && ui.log) write("v10++ — Démarrage forcé : choisis ta classe.", "sys");
+            if (typeof chooseClass === 'function') chooseClass();
+          }
+        }, 150);
+      }
+    } catch (err) {
+      console.error('[Mirval] Kickstart error:', err);
+    }
+  };
+
+  // 1ʳᵉ passe après le boot
+  setTimeout(()=> tryKick('no UI after 700ms'), 700);
+  // 2ᵉ passe (par sécurité, ex. cache SW qui recharge lentement)
+  setTimeout(()=> tryKick('second pass after 1800ms'), 1800);
+})();
+
+// 3) Si un service worker est présent et qu’il sert une ancienne version,
+//    on “bump” une version interne pour casser le cache du fichier.
+(function bumpVersionForSW(){
+  try {
+    const v = 'v10++-build-' + (new Date()).toISOString().slice(0,10);
+    // Petite empreinte dans le log (discrète)
+    if (ui && ui.log && ui.log.dataset.version !== v) {
+      ui.log.dataset.version = v;
+    }
+  } catch(_) {}
+})();
+
+// 4) Bouton “Recommencer” toujours sain (au cas où un vieux handler resterait)
+(function hardBindReset(){
+  const resetBtn = document.getElementById('btn-reset');
+  if (resetBtn) {
+    resetBtn.onclick = ()=>{
+      try {
+        state = initialState();
+        if (ui && ui.log) ui.log.innerHTML = "";
+        if (typeof setup === 'function') setup(true);
+      } catch (err) {
+        console.error('Hard reset error:', err);
+        write('⚠️ Réinitialisation partielle, recharge la page si besoin.', 'warn');
+      }
+    };
+  }
+})();
