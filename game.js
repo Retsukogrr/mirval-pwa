@@ -1,13 +1,13 @@
-// === Aventurier de Mirval — game.js (v10 Refonte Cendres) ===
-console.log("game.js v10 — Refonte Cendres de Mirval");
+// === Aventurier de Mirval — game.js (v10 Refonte+Extension) ===
+console.log("game.js v10 — Extension (Cendres de Mirval++)");
 
-// =============== QoL mobile (écran éveillé) ===============
+// ===== QoL mobile : garder l’écran éveillé =====
 let wakeLock;
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
 if('wakeLock' in navigator) keepAwake();
 
-// =============== RNG (seed affichée) ===============
+// ===== RNG (seed affichée) =====
 const rng = (() => {
   const seed = (crypto.getRandomValues?crypto.getRandomValues(new Uint32Array(1))[0]^Date.now():Date.now())>>>0;
   let s = seed>>>0;
@@ -17,7 +17,7 @@ const rng = (() => {
 })();
 const seedEl = document.getElementById('seedInfo'); if(seedEl) seedEl.textContent = `seed ${rng.seed}`;
 
-// =============== Références UI ===============
+// ===== Références UI =====
 const ui = {
   log: document.getElementById('log'),
   choices: document.getElementById('choices'),
@@ -42,32 +42,33 @@ const ui = {
   quests: document.getElementById('quests'),
 };
 
-// =============== Visuels (SVG inline) ===============
+// ===== Visuels (SVG inline améliorés) =====
 function svgIcon(kind){
-  // kind ex: place:village, npc:smith, enemy:wolf, boss:cinder
-  const base = 'width:64px;height:64px;display:block;margin:6px auto;opacity:.95;';
+  const base = 'width:72px;height:72px;display:block;margin:8px auto;opacity:.98;';
   const wrap = (p)=>`<svg viewBox="0 0 64 64" style="${base}" xmlns="http://www.w3.org/2000/svg">${p}</svg>`;
   switch(kind){
-    case 'place:village': return wrap(`<rect x="2" y="28" width="60" height="30" fill="#2b3347" stroke="#44516d"/><polygon points="2,28 32,8 62,28" fill="#556487"/><rect x="26" y="40" width="12" height="18" fill="#202636"/>`);
-    case 'place:forest': return wrap(`<rect x="0" y="44" width="64" height="20" fill="#1f2a35"/><circle cx="20" cy="34" r="12" fill="#274b3b"/><circle cx="38" cy="30" r="14" fill="#2f6049"/><rect x="18" y="44" width="4" height="20" fill="#2b1f14"/><rect x="36" y="44" width="4" height="20" fill="#2b1f14"/>`);
-    case 'place:hills': return wrap(`<path d="M0,48 C10,36 22,36 32,48 C40,38 52,38 64,48 L64,64 L0,64 Z" fill="#39465f"/>`);
-    case 'place:swamp': return wrap(`<rect x="0" y="48" width="64" height="16" fill="#24343b"/><ellipse cx="32" cy="52" rx="26" ry="8" fill="#2a5255"/><line x1="10" y1="24" x2="10" y2="48" stroke="#466b6d" stroke-width="2"/><line x1="14" y1="22" x2="14" y2="48" stroke="#466b6d" stroke-width="2"/>`);
-    case 'place:ruins': return wrap(`<rect x="10" y="30" width="44" height="24" fill="#3b3f4a"/><rect x="16" y="36" width="8" height="18" fill="#2b2f3a"/><rect x="40" y="36" width="8" height="18" fill="#2b2f3a"/><rect x="30" y="38" width="4" height="16" fill="#2b2f3a"/>`);
-    case 'place:observatory': return wrap(`<circle cx="32" cy="26" r="12" fill="#4b5a88"/><rect x="16" y="34" width="32" height="20" fill="#2a3048"/><line x1="32" y1="14" x2="50" y2="6" stroke="#9fb5f5" stroke-width="3"/>`);
-    case 'place:islet': return wrap(`<ellipse cx="32" cy="52" rx="28" ry="8" fill="#285876"/><ellipse cx="32" cy="50" rx="12" ry="5" fill="#4b7c4b"/>`);
-    case 'place:camp': return wrap(`<polygon points="12,50 32,18 52,50" fill="#6a4730"/><line x1="12" y1="50" x2="52" y2="50" stroke="#2e2118" stroke-width="3"/>`);
+    // Lieux
+    case 'place:village': return wrap(`<rect x="2" y="30" width="60" height="28" fill="#303953" stroke="#44516d"/><polygon points="2,30 32,10 62,30" fill="#60719a"/><rect x="26" y="40" width="12" height="18" fill="#1f2436"/>`);
+    case 'place:forest': return wrap(`<rect x="0" y="48" width="64" height="16" fill="#1c2630"/><circle cx="18" cy="36" r="12" fill="#2b5a42"/><circle cx="40" cy="32" r="14" fill="#337051"/><rect x="16" y="48" width="4" height="16" fill="#2b1f14"/><rect x="38" y="48" width="4" height="16" fill="#2b1f14"/>`);
+    case 'place:hills': return wrap(`<path d="M0,50 C10,36 22,36 32,50 C40,38 52,38 64,50 L64,64 L0,64 Z" fill="#3a4764"/>`);
+    case 'place:swamp': return wrap(`<rect x="0" y="50" width="64" height="14" fill="#24343b"/><ellipse cx="32" cy="52" rx="26" ry="7" fill="#2a5255"/><line x1="12" y1="24" x2="12" y2="50" stroke="#4d726e" stroke-width="2"/><line x1="16" y1="22" x2="16" y2="50" stroke="#4d726e" stroke-width="2"/>`);
+    case 'place:ruins': return wrap(`<rect x="8" y="30" width="48" height="24" fill="#3b3f4a"/><rect x="16" y="36" width="8" height="18" fill="#2b2f3a"/><rect x="40" y="36" width="8" height="18" fill="#2b2f3a"/><rect x="30" y="38" width="4" height="16" fill="#2b2f3a"/>`);
+    case 'place:observatory': return wrap(`<circle cx="32" cy="24" r="12" fill="#4b5a88"/><rect x="16" y="36" width="32" height="18" fill="#2a3048"/><line x1="32" y1="14" x2="50" y2="6" stroke="#9fb5f5" stroke-width="3"/>`);
+    case 'place:islet': return wrap(`<ellipse cx="32" cy="54" rx="28" ry="7" fill="#285876"/><ellipse cx="32" cy="51" rx="12" ry="5" fill="#4b7c4b"/>`);
+    case 'place:camp': return wrap(`<polygon points="12,52 32,18 52,52" fill="#6a4730"/><line x1="12" y1="52" x2="52" y2="52" stroke="#2e2118" stroke-width="3"/>`);
     case 'place:sanctum': return wrap(`<circle cx="32" cy="32" r="20" fill="#3a2f49"/><path d="M22 44 L32 20 L42 44 Z" fill="#8651c0"/>`);
-    case 'npc:smith': return wrap(`<rect x="12" y="36" width="40" height="18" fill="#2b2f3a"/><rect x="26" y="20" width="12" height="16" fill="#3f4759"/><rect x="30" y="42" width="4" height="8" fill="#8c6a2b"/>`);
-    case 'npc:herbalist': return wrap(`<circle cx="22" cy="36" r="10" fill="#3a6b4a"/><rect x="32" y="28" width="14" height="18" fill="#2a3b2a"/>`);
+    // PNJ
+    case 'npc:smith': return wrap(`<rect x="10" y="38" width="44" height="16" fill="#2b2f3a"/><rect x="26" y="20" width="12" height="16" fill="#3f4759"/><rect x="30" y="42" width="4" height="8" fill="#8c6a2b"/>`);
+    case 'npc:herbalist': return wrap(`<circle cx="20" cy="38" r="10" fill="#3a6b4a"/><rect x="32" y="28" width="18" height="20" fill="#2a3b2a"/>`);
     case 'npc:trader': return wrap(`<rect x="10" y="28" width="44" height="20" fill="#3d4357"/><rect x="14" y="24" width="36" height="8" fill="#5a6282"/>`);
-    case 'npc:hermit': return wrap(`<circle cx="24" cy="36" r="10" fill="#6b5e4b"/><rect x="34" y="28" width="12" height="18" fill="#3a3026"/>`);
-    case 'npc:bard': return wrap(`<circle cx="24" cy="34" r="10" fill="#5b3a6b"/><line x1="36" y1="24" x2="50" y2="50" stroke="#a98ddb" stroke-width="3"/>`);
-    case 'npc:militia': return wrap(`<rect x="20" y="24" width="24" height="28" fill="#3b4b6a"/><rect x="28" y="36" width="8" height="16" fill="#2a354a"/>`);
-    case 'enemy:wolf': return wrap(`<path d="M8,44 L24,36 L40,44 L56,40 L48,48 L8,48 Z" fill="#4b5568"/>`);
-    case 'enemy:bandit': return wrap(`<rect x="10" y="34" width="44" height="14" fill="#5a4032"/><rect x="20" y="28" width="8" height="8" fill="#2a2522"/><rect x="36" y="28" width="8" height="8" fill="#2a2522"/>`);
-    case 'enemy:boar': return wrap(`<ellipse cx="28" cy="40" rx="16" ry="10" fill="#6b5140"/><rect x="42" y="36" width="10" height="6" fill="#7b604d"/>`);
-    case 'enemy:harpy': return wrap(`<path d="M16,40 C24,20 40,20 48,40 L48,48 L16,48 Z" fill="#6b6fa4"/>`);
-    case 'enemy:ghoul': return wrap(`<rect x="20" y="26" width="24" height="20" fill="#4a6b6a"/><circle cx="28" cy="34" r="3" fill="#d4f7ff"/><circle cx="36" cy="34" r="3" fill="#d4f7ff"/>`);
+    case 'npc:hermit': return wrap(`<circle cx="24" cy="38" r="10" fill="#6b5e4b"/><rect x="36" y="28" width="12" height="20" fill="#3a3026"/>`);
+    case 'npc:bard': return wrap(`<circle cx="24" cy="36" r="10" fill="#5b3a6b"/><line x1="36" y1="24" x2="50" y2="52" stroke="#a98ddb" stroke-width="3"/>`);
+    // Ennemis / Boss
+    case 'enemy:wolf': return wrap(`<path d="M8,46 L24,36 L40,46 L56,42 L48,50 L8,50 Z" fill="#4b5568"/>`);
+    case 'enemy:bandit': return wrap(`<rect x="10" y="36" width="44" height="14" fill="#5a4032"/><rect x="20" y="30" width="8" height="8" fill="#2a2522"/><rect x="36" y="30" width="8" height="8" fill="#2a2522"/>`);
+    case 'enemy:boar': return wrap(`<ellipse cx="28" cy="42" rx="16" ry="10" fill="#6b5140"/><rect x="42" y="38" width="10" height="6" fill="#7b604d"/>`);
+    case 'enemy:harpy': return wrap(`<path d="M16,40 C24,20 40,20 48,40 L48,50 L16,50 Z" fill="#6b6fa4"/>`);
+    case 'enemy:ghoul': return wrap(`<rect x="20" y="28" width="24" height="20" fill="#4a6b6a"/><circle cx="28" cy="36" r="3" fill="#d4f7ff"/><circle cx="36" cy="36" r="3" fill="#d4f7ff"/>`);
     case 'enemy:specter': return wrap(`<path d="M22,20 C32,10 42,20 42,32 C42,46 32,48 28,56 C24,48 22,46 22,32 Z" fill="#7aa0ff"/>`);
     case 'boss:ruinlord': return wrap(`<rect x="16" y="20" width="32" height="28" fill="#5a5f78"/><path d="M16,20 L32,8 L48,20 Z" fill="#7b809a"/>`);
     case 'boss:cinder': return wrap(`<circle cx="32" cy="32" r="18" fill="#9b3f2b"/><path d="M20,40 L44,40 L32,20 Z" fill="#ff7a57"/>`);
@@ -81,7 +82,7 @@ function showVisual(kind){
   ui.log.scrollTop=ui.log.scrollHeight;
 }
 
-// =============== UI helpers ===============
+// ===== UI helpers =====
 function write(t, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=t; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
 function clearChoices(){ ui.choices.innerHTML=""; }
 function addChoice(label, handler, primary=false){
@@ -90,14 +91,14 @@ function addChoice(label, handler, primary=false){
   btn.textContent = label;
   btn.addEventListener('click', ()=>{
     if(btn.disabled) return;
-    btn.disabled = true; // anti double-clic local
+    btn.disabled = true; // anti double-clic / anti spam
     try{ handler(); }catch(e){ console.error(e); write(`⚠️ ${e.message}`,'warn'); }
   });
   ui.choices.appendChild(btn);
 }
 function repText(n){return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'}
 
-// =============== Équipement & stats ===============
+// ===== Équipement & stats (FOR/AGI/SAG renommés + DEF réelle) =====
 function totalMod(key){ return (state.equipped||[]).reduce((a,it)=>a+(it.mods&&it.mods[key]||0),0); }
 function effFOR(){ return state.attrs.FOR + totalMod('FOR'); }
 function effAGI(){ return state.attrs.AGI + totalMod('AGI'); }
@@ -122,9 +123,9 @@ function autoEquip(item){
   else { state.inventory.push(item); }
 }
 
-// =============== Affichage ===============
+// ===== Affichage =====
 function setStats(){
-  ui.hp.textContent = state.hp; ui.hpmax.textContent = state.hpMax;
+  ui.hp.textContent = state.hp; ui.hpmax.textContent=state.hpMax;
   ui.hpbar.style.width = Math.max(0,Math.min(100,Math.round(state.hp/state.hpMax*100)))+'%';
   ui.gold.textContent = state.gold; ui.lvl.textContent = state.level; ui.xp.textContent = state.xp;
   ui.status.textContent = state.status.length? state.status.map(s=>s.name).join(', ') : '—';
@@ -154,7 +155,7 @@ function setStats(){
   state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
 }
 
-// =============== Core helpers ===============
+// ===== Core helpers =====
 function d20(mod=0){ const r=rng.between(1,20); const t=r+mod; ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${r} = ${t}`; return {roll:r,total:t}; }
 function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,'good'); }
 function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,'bad'); if(state.hp<=0){ gameOver(); return true; } return false; }
@@ -171,7 +172,7 @@ function removeFromCollections(name){
 }
 function rep(n){ state.rep+=n; setStats(); }
 
-// =============== Statuts récurrents ===============
+// ===== Statuts récurrents =====
 function tickStatus(){
   state.status = state.status.filter(st=>{
     if(st.type==='poison'){ const d=rng.between(1,2); damage(d,'Poison'); st.dur--; }
@@ -181,7 +182,7 @@ function tickStatus(){
   });
 }
 
-// =============== Combat ===============
+// ===== Combat (stable) =====
 function playerAtkMod(){ let m=0; if(state.cls==='Guerrier') m+=2; if(effFOR()>=3) m+=1; if(hasItem('Épée affûtée')) m+=1; return m; }
 function playerDef(){ return effDEF(); }
 function terrainPenalty(){ return state.locationKey==='marais' ? -1 : 0; }
@@ -275,7 +276,7 @@ function afterCombat(){
   explore();
 }
 
-// =============== Bestiaire ===============
+// ===== Bestiaire =====
 const mobs = {
   wolf: ()=>({ name:'Loup affamé', hp:10, maxHp:10, ac:11, hitMod:2, tier:1, icon:'enemy:wolf' }),
   bandit: ()=>({ name:'Bandit des fourrés', hp:12, maxHp:12, ac:12, hitMod:3, tier:2, dotChance:0.1, dotType:'bleed', icon:'enemy:bandit' }),
@@ -286,11 +287,11 @@ const mobs = {
   ruinLord: ()=>({ name:'Seigneur des Ruines', hp:28, maxHp:28, ac:15, hitMod:6, tier:4, icon:'boss:ruinlord' }),
   cinderLord: ()=>({ name:'Seigneur des Cendres', hp:30, maxHp:30, ac:15, hitMod:6, tier:4, dotChance:0.25, dotType:'bleed', icon:'boss:cinder' })
 };
-// =============== Boss helpers ===============
+// ===== Boss helpers =====
 function combatRuinLord(){ showVisual('boss:ruinlord'); write('🗿 Les pierres vibrent… le Seigneur des Ruines s’éveille.','warn'); combat(mobs.ruinLord()); }
 function combatCinderLord(){ showVisual('boss:cinder'); write('🔥 Les braises s’embrasent — le Seigneur des Cendres apparaît.','warn'); combat(mobs.cinderLord()); }
 
-// =============== Temps & monde ===============
+// ===== Temps & monde =====
 function setTime(){
   const slots=['Aube','Matin','Midi','Après-midi','Crépuscule','Nuit'];
   const i=slots.indexOf(state.time); let n=(i+1)%slots.length; if(n===0){ state.day++; onNewDay(); }
@@ -300,6 +301,8 @@ function onNewDay(){
   state.daily.herbalist = true;
   state.daily.smith = true;
   state.daily.trader = true;
+  // Marchand itinérant : rotation légère
+  if(rng.rand()<0.5) state.flags.offerBoatToday = true; else state.flags.offerBoatToday = false;
 }
 function continueBtn(){ clearChoices(); addChoice('Continuer', ()=>explore(), true); }
 function gotoZone(key){
@@ -329,7 +332,7 @@ function pickWeighted(items, k){
   return out;
 }
 
-// =============== Actions génériques ===============
+// ===== Actions génériques =====
 function searchArea(){
   const bonus = effSAG()>=3?1:0;
   const {total}=d20(bonus);
@@ -350,13 +353,22 @@ function useItemMenu(){
     if(state.potions<=0){ write("Tu n'as pas de potion.",'warn'); return continueBtn(); }
     state.potions--; heal(rng.between(8,12)); continueBtn();
   }, true);
+  // Remèdes simples si Herboriste amie
+  if(state.factions.sanctum>=10){
+    addChoice('Baume maison (2 or → +4 PV)', ()=>{
+      if(state.gold>=2){ changeGold(-2); heal(4); }
+      else write("Pas assez d'or.",'warn');
+      continueBtn();
+    });
+  }
   addChoice('Annuler', ()=>explore());
 }
 function chest(){
   const r=rng.between(1,100);
-  if(r>90){ addItem('Bouclier en fer','Bouclier solide',{DEF:+2},9,'shield'); }
-  else if(r>70){ state.potions++; write('Tu trouves une potion.','good'); }
-  else if(r>40){ changeGold(rng.between(7,15)); }
+  if(r>92){ addItem('Bouclier en fer','Bouclier solide',{DEF:+2},9,'shield'); }
+  else if(r>75){ state.potions++; write('Tu trouves une potion.','good'); }
+  else if(r>45){ changeGold(rng.between(7,15)); }
+  else if(r>30){ addItem('Anneau terni','- bonus léger',{SAG:+1},6,'ring'); }
   else { write('💥 Piège !','bad'); damage(rng.between(3,6),'Piège'); }
 }
 function randomEncounter(){
@@ -374,14 +386,13 @@ function randomEncounter(){
   }
 }
 
-// =============== PNJ / Économie / Événements ===============
+// ===== PNJ / Économie / Craft simple =====
 function priceWithRep(base, factionKey){
   const rep = state.factions[factionKey]||0;
   const mult = rep>=15?0.85 : rep<=-15?1.25 : 1;
   return Math.max(1, Math.round(base*mult));
 }
 function eventHerbalist(){
-  if(state.locationKey==='village'){ showVisual('npc:herbalist'); }
   showVisual('npc:herbalist');
   if(!state.daily.herbalist){ write("🌿 L’herboriste n’est plus là pour aujourd’hui.",'info'); return continueBtn(); }
   write('🌿 Une herboriste te fait signe. Parfum de menthe.');
@@ -396,6 +407,12 @@ function eventHerbalist(){
     const cost=priceWithRep(4,'sanctum');
     if(state.gold>=cost){ changeGold(-cost); state.potions++; state.factions.sanctum+=1; state.daily.herbalist=false; write("Tu obtiens une potion.",'good'); }
     else write("Pas assez d'or.",'warn');
+    continueBtn();
+  });
+  addChoice('Extraire des herbes (craft)', ()=>{
+    const {total}=d20(effSAG()>=3?2:0);
+    if(total>=14){ const n=rng.between(1,2); state.flags.herbs=(state.flags.herbs||0)+n; write(`Tu récoltes ${n} herbe(s).`,'good'); }
+    else write("Rien d'utile aujourd’hui.",'info');
     continueBtn();
   });
   addChoice('Partir', continueBtn);
@@ -415,6 +432,11 @@ function eventSmith(){
     const cost=priceWithRep(8,'townsfolk');
     if(state.gold>=cost){ changeGold(-cost); addItem('Bouclier en fer','Acier cabossé',{DEF:+2},8,'shield'); state.factions.townsfolk+=1; state.daily.smith=false; }
     else write("Pas assez d'or.",'warn');
+    continueBtn();
+  });
+  addChoice('Forger (minerai x2)', ()=>{
+    if((state.flags.ore||0)>=2){ state.flags.ore-=2; addItem('Cuir renforcé','Cuir robuste',{DEF:+2},8,'armor'); write('Tu forges une armure de fortune.','good'); state.daily.smith=false; }
+    else write('Il te faut du minerai (x2).','warn');
     continueBtn();
   });
   addChoice('Discuter (+réputation Bourgeois)', ()=>{ state.factions.townsfolk+=2; write("Il t’indique des sentiers sûrs.",'info'); state.daily.smith=false; continueBtn(); });
@@ -443,9 +465,16 @@ function eventTrader(){
   }, true);
   addChoice(`Barque — ${priceWithRep(9,'townsfolk')} or`, ()=>{
     const cost=priceWithRep(9,'townsfolk');
+    if(!state.flags.offerBoatToday){ write("La barque n’est pas disponible aujourd’hui.",'info'); return continueBtn(); }
     if(state.gold>=cost){ changeGold(-cost); state.flags.boat=true; addItem('Barque','Permet d’atteindre l’îlot du lac',{},6,null); state.factions.townsfolk+=1; state.daily.trader=false; write('Tu obtiens une petite barque pliable.','good'); }
     else write("Pas assez d'or.",'warn');
     continueBtn();
+  });
+  addChoice('Acheter matériel (minerai 3 or / herbe 2 or)', ()=>{
+    clearChoices();
+    addChoice('Acheter 1 minerai (3 or)', ()=>{ if(state.gold>=3){ changeGold(-3); state.flags.ore=(state.flags.ore||0)+1; write('Tu obtiens 1 minerai.','good'); } sellMenu(); });
+    addChoice('Acheter 1 herbe (2 or)', ()=>{ if(state.gold>=2){ changeGold(-2); state.flags.herbs=(state.flags.herbs||0)+1; write('Tu obtiens 1 herbe.','good'); } sellMenu(); });
+    addChoice('Terminer', continueBtn, true);
   });
   addChoice('Vendre un objet', ()=> sellMenu());
   addChoice('Partir', continueBtn);
@@ -532,7 +561,7 @@ function eventRuins(){
   addChoice('Partir', continueBtn);
 }
 
-// =============== Lieux uniques ===============
+// ===== Lieux uniques =====
 function eventObservatory(){
   showVisual('place:observatory');
   write('🔭 La Tour de l’Observatoire pointe vers un ciel tourmenté.');
@@ -594,10 +623,9 @@ function eventSanctuaryCinders(){
   addChoice('Prier (petit soin)', ()=>{ heal(rng.between(3,6)); continueBtn(); });
   addChoice('Partir', continueBtn);
 }
-// =============== Exploration (progression & gating) ===============
+// ===== Exploration (progression & gating) =====
 function maybeAdvanceMainQuest(){
   // Quête principale : Les Cendres de Mirval
-  // Obtenir 3 reliques → accès Sanctuaire des Cendres
   if(state.flags.relicWarrior && state.flags.relicSage && state.flags.relicWater){
     if(!state.flags.cindersUnlocked){
       state.flags.cindersUnlocked = true;
@@ -705,7 +733,7 @@ function explore(initial=false){
   shown.forEach((c,i)=> addChoice(c.label, c.act, i===0));
 }
 
-// =============== Oracle & fins ===============
+// ===== Oracle & fins =====
 function eventOracle(){
   write('🔮 Une voyante apparaît dans tes rêves.'); 
   clearChoices();
@@ -719,7 +747,7 @@ function ending(){
   addChoice('Rejouer (New Game+)', ()=>{ const st=initialState(); st.attrs.FOR++; st.attrs.AGI++; st.attrs.SAG++; state=st; ui.log.innerHTML=''; setup(true); }, true);
 }
 
-// =============== Choix de classe ===============
+// ===== Choix de classe (affiché au démarrage) =====
 function chooseClass(){
   clearChoices();
   write('Choisis ta classe :','info');
@@ -751,7 +779,7 @@ function chooseClass(){
   }));
 }
 
-// =============== État initial ===============
+// ===== État initial =====
 function initialState(){
   return {
     name:'Eldarion', cls:'—',
@@ -773,7 +801,8 @@ function initialState(){
       ruinsUnlocked:false, campKnown:false,
       relicWarrior:false, relicSage:false, relicWater:false,
       cindersUnlocked:false, oracleSeen:false,
-      peasantSaved:false, campLooted:false, sanctuaryFavor:false
+      peasantSaved:false, campLooted:false, sanctuaryFavor:false,
+      ore:0, herbs:0, offerBoatToday:true
     },
     quests:{ 
       main:{title:'Les Cendres de Mirval',state:'Se préparer au voyage'},
@@ -787,7 +816,7 @@ function initialState(){
 }
 let state = initialState();
 
-// =============== Setup / boucle ===============
+// ===== Setup / boucle =====
 function setup(isNew=false){
   setStats();
   ui.loc.textContent = state.location;
