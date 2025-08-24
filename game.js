@@ -1,13 +1,13 @@
-// === Aventurier de Mirval — game.js (v10 Refonte+Extension) ===
-console.log("game.js v10 — Extension (Cendres de Mirval++)");
+// === Aventurier de Mirval — game.js (v10++ Cohérence & Gameplay) ===
+console.log("game.js v10++ loaded");
 
-// ===== QoL mobile : garder l’écran éveillé =====
+// ----- Mobile QoL: WakeLock -----
 let wakeLock;
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
 if('wakeLock' in navigator) keepAwake();
 
-// ===== RNG (seed affichée) =====
+// ----- RNG (seed) -----
 const rng = (() => {
   const seed = (crypto.getRandomValues?crypto.getRandomValues(new Uint32Array(1))[0]^Date.now():Date.now())>>>0;
   let s = seed>>>0;
@@ -17,7 +17,7 @@ const rng = (() => {
 })();
 const seedEl = document.getElementById('seedInfo'); if(seedEl) seedEl.textContent = `seed ${rng.seed}`;
 
-// ===== Références UI =====
+// ----- UI refs -----
 const ui = {
   log: document.getElementById('log'),
   choices: document.getElementById('choices'),
@@ -42,47 +42,7 @@ const ui = {
   quests: document.getElementById('quests'),
 };
 
-// ===== Visuels (SVG inline améliorés) =====
-function svgIcon(kind){
-  const base = 'width:72px;height:72px;display:block;margin:8px auto;opacity:.98;';
-  const wrap = (p)=>`<svg viewBox="0 0 64 64" style="${base}" xmlns="http://www.w3.org/2000/svg">${p}</svg>`;
-  switch(kind){
-    // Lieux
-    case 'place:village': return wrap(`<rect x="2" y="30" width="60" height="28" fill="#303953" stroke="#44516d"/><polygon points="2,30 32,10 62,30" fill="#60719a"/><rect x="26" y="40" width="12" height="18" fill="#1f2436"/>`);
-    case 'place:forest': return wrap(`<rect x="0" y="48" width="64" height="16" fill="#1c2630"/><circle cx="18" cy="36" r="12" fill="#2b5a42"/><circle cx="40" cy="32" r="14" fill="#337051"/><rect x="16" y="48" width="4" height="16" fill="#2b1f14"/><rect x="38" y="48" width="4" height="16" fill="#2b1f14"/>`);
-    case 'place:hills': return wrap(`<path d="M0,50 C10,36 22,36 32,50 C40,38 52,38 64,50 L64,64 L0,64 Z" fill="#3a4764"/>`);
-    case 'place:swamp': return wrap(`<rect x="0" y="50" width="64" height="14" fill="#24343b"/><ellipse cx="32" cy="52" rx="26" ry="7" fill="#2a5255"/><line x1="12" y1="24" x2="12" y2="50" stroke="#4d726e" stroke-width="2"/><line x1="16" y1="22" x2="16" y2="50" stroke="#4d726e" stroke-width="2"/>`);
-    case 'place:ruins': return wrap(`<rect x="8" y="30" width="48" height="24" fill="#3b3f4a"/><rect x="16" y="36" width="8" height="18" fill="#2b2f3a"/><rect x="40" y="36" width="8" height="18" fill="#2b2f3a"/><rect x="30" y="38" width="4" height="16" fill="#2b2f3a"/>`);
-    case 'place:observatory': return wrap(`<circle cx="32" cy="24" r="12" fill="#4b5a88"/><rect x="16" y="36" width="32" height="18" fill="#2a3048"/><line x1="32" y1="14" x2="50" y2="6" stroke="#9fb5f5" stroke-width="3"/>`);
-    case 'place:islet': return wrap(`<ellipse cx="32" cy="54" rx="28" ry="7" fill="#285876"/><ellipse cx="32" cy="51" rx="12" ry="5" fill="#4b7c4b"/>`);
-    case 'place:camp': return wrap(`<polygon points="12,52 32,18 52,52" fill="#6a4730"/><line x1="12" y1="52" x2="52" y2="52" stroke="#2e2118" stroke-width="3"/>`);
-    case 'place:sanctum': return wrap(`<circle cx="32" cy="32" r="20" fill="#3a2f49"/><path d="M22 44 L32 20 L42 44 Z" fill="#8651c0"/>`);
-    // PNJ
-    case 'npc:smith': return wrap(`<rect x="10" y="38" width="44" height="16" fill="#2b2f3a"/><rect x="26" y="20" width="12" height="16" fill="#3f4759"/><rect x="30" y="42" width="4" height="8" fill="#8c6a2b"/>`);
-    case 'npc:herbalist': return wrap(`<circle cx="20" cy="38" r="10" fill="#3a6b4a"/><rect x="32" y="28" width="18" height="20" fill="#2a3b2a"/>`);
-    case 'npc:trader': return wrap(`<rect x="10" y="28" width="44" height="20" fill="#3d4357"/><rect x="14" y="24" width="36" height="8" fill="#5a6282"/>`);
-    case 'npc:hermit': return wrap(`<circle cx="24" cy="38" r="10" fill="#6b5e4b"/><rect x="36" y="28" width="12" height="20" fill="#3a3026"/>`);
-    case 'npc:bard': return wrap(`<circle cx="24" cy="36" r="10" fill="#5b3a6b"/><line x1="36" y1="24" x2="50" y2="52" stroke="#a98ddb" stroke-width="3"/>`);
-    // Ennemis / Boss
-    case 'enemy:wolf': return wrap(`<path d="M8,46 L24,36 L40,46 L56,42 L48,50 L8,50 Z" fill="#4b5568"/>`);
-    case 'enemy:bandit': return wrap(`<rect x="10" y="36" width="44" height="14" fill="#5a4032"/><rect x="20" y="30" width="8" height="8" fill="#2a2522"/><rect x="36" y="30" width="8" height="8" fill="#2a2522"/>`);
-    case 'enemy:boar': return wrap(`<ellipse cx="28" cy="42" rx="16" ry="10" fill="#6b5140"/><rect x="42" y="38" width="10" height="6" fill="#7b604d"/>`);
-    case 'enemy:harpy': return wrap(`<path d="M16,40 C24,20 40,20 48,40 L48,50 L16,50 Z" fill="#6b6fa4"/>`);
-    case 'enemy:ghoul': return wrap(`<rect x="20" y="28" width="24" height="20" fill="#4a6b6a"/><circle cx="28" cy="36" r="3" fill="#d4f7ff"/><circle cx="36" cy="36" r="3" fill="#d4f7ff"/>`);
-    case 'enemy:specter': return wrap(`<path d="M22,20 C32,10 42,20 42,32 C42,46 32,48 28,56 C24,48 22,46 22,32 Z" fill="#7aa0ff"/>`);
-    case 'boss:ruinlord': return wrap(`<rect x="16" y="20" width="32" height="28" fill="#5a5f78"/><path d="M16,20 L32,8 L48,20 Z" fill="#7b809a"/>`);
-    case 'boss:cinder': return wrap(`<circle cx="32" cy="32" r="18" fill="#9b3f2b"/><path d="M20,40 L44,40 L32,20 Z" fill="#ff7a57"/>`);
-    default: return wrap(`<circle cx="32" cy="32" r="10" fill="#607d8b"/>`);
-  }
-}
-function showVisual(kind){
-  const p=document.createElement('p');
-  p.innerHTML = svgIcon(kind);
-  ui.log.appendChild(p);
-  ui.log.scrollTop=ui.log.scrollHeight;
-}
-
-// ===== UI helpers =====
+// ----- UI helpers -----
 function write(t, cls=""){ const p=document.createElement('p'); if(cls) p.classList.add(cls); p.innerHTML=t; ui.log.appendChild(p); ui.log.scrollTop=ui.log.scrollHeight; }
 function clearChoices(){ ui.choices.innerHTML=""; }
 function addChoice(label, handler, primary=false){
@@ -91,20 +51,82 @@ function addChoice(label, handler, primary=false){
   btn.textContent = label;
   btn.addEventListener('click', ()=>{
     if(btn.disabled) return;
-    btn.disabled = true; // anti double-clic / anti spam
+    btn.disabled = true; // anti spam
     try{ handler(); }catch(e){ console.error(e); write(`⚠️ ${e.message}`,'warn'); }
   });
   ui.choices.appendChild(btn);
 }
 function repText(n){return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'}
 
-// ===== Équipement & stats (FOR/AGI/SAG renommés + DEF réelle) =====
+// ----- Visuels minimalistes (facultatifs, ne bloquent rien) -----
+function showVisual(kind){
+  // volontairement simple : on garde le focus gameplay
+  const map = {
+    village:'🏘️', foret:'🌲', collines:'⛰️', marais:'🪵', ruines:'🏚️',
+    observatoire:'🔭', ilot:'🏝️', camp:'⛺', sanctuaire:'🔥',
+    smith:'⚒️', herbalist:'🌿', trader:'🧳', bard:'🎻', hermit:'🧙',
+    wolf:'🐺', bandit:'🥷', boar:'🐗', harpy:'🦅', ghoul:'🧟', specter:'👻',
+    ruinlord:'🗿', cinder:'🔥'
+  };
+  write(`<span aria-hidden="true" style="font-size:24px">${map[kind]||'✨'}</span>`);
+}
+
+// ----- Stats & affichage -----
+function setStats(){
+  ui.hp.textContent = state.hp; ui.hpmax.textContent=state.hpMax;
+  ui.hpbar.style.width = Math.max(0,Math.min(100,Math.round(state.hp/state.hpMax*100)))+'%';
+  ui.gold.textContent = state.gold; ui.lvl.textContent = state.level; ui.xp.textContent = state.xp;
+  ui.status.textContent = state.status.length? state.status.map(s=>s.name).join(', ') : '—';
+  ui.pclass.textContent = state.cls; ui.pname.textContent = state.name;
+  ui.aFOR.textContent = effFOR(); ui.aAGI.textContent = effAGI(); ui.aSAG.textContent = effSAG();
+  ui.rep.textContent = state.rep; ui.repLabel.textContent = repText(state.rep);
+
+  // Inventaire
+  ui.inv.innerHTML="";
+  const eqTitle=document.createElement('div'); eqTitle.className='stat'; eqTitle.innerHTML='<b>Équipé</b><span>—</span>'; ui.inv.appendChild(eqTitle);
+  (state.equipped||[]).forEach(it=>{
+    const d=document.createElement('div'); d.className='stat';
+    d.innerHTML = `<b>${itDisplayName(it)}</b><span>${describeMods(it)} [${it.slot}]</span>`;
+    ui.inv.appendChild(d);
+  });
+  const invTitle=document.createElement('div'); invTitle.className='stat'; invTitle.innerHTML='<b>Sac</b><span>—</span>'; ui.inv.appendChild(invTitle);
+  state.inventory.forEach(it=>{
+    const d=document.createElement('div'); d.className='stat';
+    d.innerHTML = `<b>${itDisplayName(it)}</b><span>${describeMods(it)}${it.slot?` [${it.slot}]`:''}</span>`;
+    ui.inv.appendChild(d);
+  });
+
+  // Quêtes
+  ui.quests.innerHTML='';
+  const mq=document.createElement('div'); mq.className='stat'; mq.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state}</span>`; ui.quests.appendChild(mq);
+  const rq=document.createElement('div'); rq.className='stat'; rq.innerHTML=`<b>Reliques</b><span>${state.flags.relicWarrior? 'Guerrier ✓' : 'Guerrier ✗'} | ${state.flags.relicSage? 'Sage ✓' : 'Sage ✗'} | ${state.flags.relicWater? 'Eau ✓' : 'Eau ✗'}</span>`; ui.quests.appendChild(rq);
+  state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
+}
+
+// ----- Caracs effectives (équipement) -----
 function totalMod(key){ return (state.equipped||[]).reduce((a,it)=>a+(it.mods&&it.mods[key]||0),0); }
 function effFOR(){ return state.attrs.FOR + totalMod('FOR'); }
 function effAGI(){ return state.attrs.AGI + totalMod('AGI'); }
 function effSAG(){ return state.attrs.SAG + totalMod('SAG'); }
 function effDEF(){ return 10 + totalMod('DEF') + (state.cls==='Paladin'?1:0) + (effAGI()>=3?1:0); }
 
+// ----- Base helpers -----
+function d20(mod=0){ const r=rng.between(1,20); const t=r+mod; ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${r} = ${t}`; return {roll:r,total:t}; }
+function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,'good'); }
+function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,'bad'); if(state.hp<=0){ gameOver(); return true; } return false; }
+function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n}`,(n>=0)?'good':'warn'); }
+function gainXP(n){ state.xp+=n; const need=20+(state.level-1)*15; write(`XP +${n} (total ${state.xp}/${need})`,'info'); if(state.xp>=need){ state.level++; state.xp=0; state.hpMax+=5; state.hp=state.hpMax; write(`<b>Niveau ${state.level} !</b> PV max +5, PV restaurés.`,'good'); } setStats(); }
+function rep(n){ state.rep+=n; setStats(); }
+
+// ----- Inventaire / équipement -----
+function itDisplayName(it){ return it.rarity ? `${it.name} <small style="color:${it.rarity.color}">(${it.rarity.label})</small>` : it.name; }
+function describeMods(it){
+  if(it.use) return it.desc||'Objet utilisable';
+  const parts=[]; const m=it.mods||{};
+  for(const k of ['FOR','AGI','SAG','DEF']) if(m[k]) parts.push(`${m[k]>0?'+':''}${m[k]} ${k}`);
+  const txt = parts.join(', ');
+  return (it.desc?it.desc+(txt?' — ':''):'') + txt;
+}
 function equip(item){
   const slot = item.slot||'misc';
   const prev = state.equipped.find(i=>i.slot===slot);
@@ -122,47 +144,6 @@ function autoEquip(item){
   if(!prev || score(item)>score(prev)){ state.inventory.push(item); equip(item); }
   else { state.inventory.push(item); }
 }
-
-// ===== Affichage =====
-function setStats(){
-  ui.hp.textContent = state.hp; ui.hpmax.textContent=state.hpMax;
-  ui.hpbar.style.width = Math.max(0,Math.min(100,Math.round(state.hp/state.hpMax*100)))+'%';
-  ui.gold.textContent = state.gold; ui.lvl.textContent = state.level; ui.xp.textContent = state.xp;
-  ui.status.textContent = state.status.length? state.status.map(s=>s.name).join(', ') : '—';
-  ui.pclass.textContent = state.cls; ui.pname.textContent = state.name;
-  ui.aFOR.textContent = effFOR(); ui.aAGI.textContent = effAGI(); ui.aSAG.textContent = effSAG();
-  ui.rep.textContent = state.rep; ui.repLabel.textContent = repText(state.rep);
-
-  ui.inv.innerHTML="";
-  const eqTitle=document.createElement('div'); eqTitle.className='stat'; eqTitle.innerHTML='<b>Équipé</b><span>—</span>'; ui.inv.appendChild(eqTitle);
-  (state.equipped||[]).forEach(it=>{
-    const d=document.createElement('div'); d.className='stat';
-    const mods = it.mods ? Object.entries(it.mods).map(([k,v])=>`${v>0?'+':''}${v} ${k}`).join(', ') : '';
-    d.innerHTML = `<b>${it.name}</b><span>${it.desc}${mods?` — ${mods}`:''} [${it.slot}]</span>`;
-    ui.inv.appendChild(d);
-  });
-  const invTitle=document.createElement('div'); invTitle.className='stat'; invTitle.innerHTML='<b>Sac</b><span>—</span>'; ui.inv.appendChild(invTitle);
-  state.inventory.forEach(it=>{
-    const d=document.createElement('div'); d.className='stat';
-    const mods = it.mods ? Object.entries(it.mods).map(([k,v])=>`${v>0?'+':''}${v} ${k}`).join(', ') : '';
-    d.innerHTML = `<b>${it.name}</b><span>${it.desc}${mods?` — ${mods}`:''}${it.slot?` [${it.slot}]`:''}</span>`;
-    ui.inv.appendChild(d);
-  });
-
-  ui.quests.innerHTML='';
-  const mq=document.createElement('div'); mq.className='stat'; mq.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state}</span>`; ui.quests.appendChild(mq);
-  const rq=document.createElement('div'); rq.className='stat'; rq.innerHTML=`<b>Reliques</b><span>${state.flags.relicWarrior? 'Guerrier ✓' : 'Guerrier ✗'} | ${state.flags.relicSage? 'Sage ✓' : 'Sage ✗'} | ${state.flags.relicWater? 'Eau ✓' : 'Eau ✗'}</span>`; ui.quests.appendChild(rq);
-  state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
-}
-
-// ===== Core helpers =====
-function d20(mod=0){ const r=rng.between(1,20); const t=r+mod; ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${r} = ${t}`; return {roll:r,total:t}; }
-function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,'good'); }
-function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,'bad'); if(state.hp<=0){ gameOver(); return true; } return false; }
-function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n}`,(n>=0)?'good':'warn'); }
-function gainXP(n){ state.xp+=n; const need=20+(state.level-1)*15; write(`XP +${n} (total ${state.xp}/${need})`,'info'); if(state.xp>=need){ state.level++; state.xp=0; state.hpMax+=5; state.hp=state.hpMax; write(`<b>Niveau ${state.level} !</b> PV max +5, PV restaurés.`,'good'); } setStats(); }
-function addItem(name,desc,mods={},value=4,slot=null){ const it={name,desc,mods,value,slot}; autoEquip(it); write(`Tu obtiens <b>${name}</b>.`,'good'); }
-function hasItem(name){ return state.inventory.some(i=>i.name===name) || state.equipped.some(i=>i.name===name); }
 function removeFromCollections(name){
   let i = state.inventory.findIndex(x=>x.name===name);
   if(i>=0){ state.inventory.splice(i,1); return true; }
@@ -170,9 +151,113 @@ function removeFromCollections(name){
   if(i>=0){ state.equipped.splice(i,1); return true; }
   return false;
 }
-function rep(n){ state.rep+=n; setStats(); }
 
-// ===== Statuts récurrents =====
+// ----- Raretés & Catalogue -----
+const RARITY = {
+  common:   { label:'Commun',    color:'#cbd5e1', mult:1.0, weight:55 },
+  uncommon: { label:'Peu commun',color:'#86efac', mult:1.5, weight:26 },
+  rare:     { label:'Rare',      color:'#60a5fa', mult:2.2, weight:13 },
+  epic:     { label:'Épique',    color:'#f472b6', mult:3.2, weight:5  },
+  mythic:   { label:'Mythique',  color:'#f59e0b', mult:4.5, weight:1  },
+};
+const ITEMS = {
+  weapons: [
+    { key:'rust_sword',   name:'Épée rouillée',  slot:'weapon', mods:{FOR:+1}, baseValue:4,  desc:'Vieille lame' },
+    { key:'sharp_sword',  name:'Épée affûtée',   slot:'weapon', mods:{FOR:+2}, baseValue:9,  desc:'Coupe net'    },
+    { key:'hunter_bow',   name:'Arc du trappeur',slot:'weapon', mods:{AGI:+2}, baseValue:9,  desc:'Souple'       },
+    { key:'mace_oak',     name:'Masse en chêne', slot:'weapon', mods:{FOR:+1,DEF:+1}, baseValue:10, desc:'Solide' },
+  ],
+  armors: [
+    { key:'padded_jack',  name:'Veste matelassée',slot:'armor', mods:{DEF:+1}, baseValue:5,  desc:'Épaisse' },
+    { key:'leather_rein', name:'Cuir renforcé',    slot:'armor', mods:{DEF:+2}, baseValue:10, desc:'Renforcé' },
+    { key:'chain_shirt',  name:'Cotte légère',     slot:'armor', mods:{DEF:+2,AGI:+1}, baseValue:14, desc:'Anneaux' },
+  ],
+  shields: [
+    { key:'wood_shield',  name:'Bouclier en bois', slot:'shield', mods:{DEF:+1}, baseValue:5,  desc:'Planche' },
+    { key:'iron_shield',  name:'Bouclier en fer',  slot:'shield', mods:{DEF:+2}, baseValue:9,  desc:'Lourd'  },
+  ],
+  trinkets: [
+    { key:'charm_hermit', name:"Breloque d'ermite", slot:'charm', mods:{SAG:+1}, baseValue:8,  desc:'Apaisante' },
+    { key:'ring_focus',   name:'Anneau de focus',   slot:'ring',  mods:{SAG:+1}, baseValue:8,  desc:'Clarté'   },
+    { key:'ring_flex',    name:'Anneau d’adresse',  slot:'ring',  mods:{AGI:+1}, baseValue:8,  desc:'Souplesse' },
+  ],
+  consumables: [
+    { key:'salve_small',  name:'Baume mineur',      slot:null,    mods:{},       baseValue:3,  desc:'Soin +4', use:()=>heal(4) },
+    { key:'salve_major',  name:'Baume majeur',      slot:null,    mods:{},       baseValue:6,  desc:'Soin +8', use:()=>heal(8) },
+  ]
+};
+
+// ----- Génération de loot / boutique -----
+function pickRarity(tier=1){
+  // tiers élevés → plus de rare/épique/mythique
+  const bonus = Math.min(20, (tier-1)*6);
+  const table = [
+    {r:RARITY.common,   w:RARITY.common.weight - Math.floor(bonus/2)},
+    {r:RARITY.uncommon, w:RARITY.uncommon.weight + Math.floor(bonus/3)},
+    {r:RARITY.rare,     w:RARITY.rare.weight + Math.floor(bonus/2)},
+    {r:RARITY.epic,     w:RARITY.epic.weight + Math.floor(bonus/3)},
+    {r:RARITY.mythic,   w:RARITY.mythic.weight + Math.floor(bonus/5)},
+  ].map(x=>({r:x.r, w:Math.max(1,x.w)}));
+  const sum = table.reduce((a,x)=>a+x.w,0);
+  let roll = rng.between(1,sum);
+  for(const x of table){ if(roll<=x.w) return x.r; roll-=x.w; }
+  return RARITY.common;
+}
+function boostByRarity(baseMods, rarity){
+  const mods={...baseMods};
+  if(rarity===RARITY.uncommon){ // petit buff
+    if(mods.FOR) mods.FOR+=1; else if(mods.AGI) mods.AGI+=1; else if(mods.SAG) mods.SAG+=1; else mods.DEF=(mods.DEF||0)+1;
+  }else if(rarity===RARITY.rare){
+    if(mods.DEF) mods.DEF+=1; if(mods.FOR) mods.FOR+=1; if(mods.AGI) mods.AGI+=1;
+  }else if(rarity===RARITY.epic){
+    for(const k of ['FOR','AGI','SAG','DEF']) mods[k]=(mods[k]||0)+(k==='DEF'?2:1);
+  }else if(rarity===RARITY.mythic){
+    for(const k of ['FOR','AGI','SAG','DEF']) mods[k]=(mods[k]||0)+(k==='DEF'?3:2);
+  }
+  return mods;
+}
+function makeItemInstance(base, rarity){
+  return {
+    name: base.name,
+    slot: base.slot||null,
+    mods: boostByRarity(base.mods||{}, rarity),
+    value: Math.max(1, Math.round((base.baseValue||4) * rarity.mult)),
+    desc: base.desc||'',
+    rarity
+  };
+}
+function rollLoot(tier=1){
+  // 60% équipement, 40% consommable
+  if(rng.rand()<0.4){
+    const pool = ITEMS.consumables;
+    const b = pool[rng.between(0,pool.length-1)];
+    const it = makeItemInstance(b, RARITY.common);
+    return it;
+  }
+  const cats = ['weapons','armors','shields','trinkets'];
+  const cat = cats[rng.between(0,cats.length-1)];
+  const pool = ITEMS[cat];
+  const base = pool[rng.between(0,pool.length-1)];
+  const rarity = pickRarity(tier);
+  return makeItemInstance(base, rarity);
+}
+function genStock(size=4){
+  const out=[];
+  const all = [...ITEMS.weapons, ...ITEMS.armors, ...ITEMS.shields, ...ITEMS.trinkets];
+  for(let i=0;i<size;i++){
+    const b = all[rng.between(0,all.length-1)];
+    const r = pickRarity(1 + Math.floor(state.level/2));
+    out.push(makeItemInstance(b,r));
+  }
+  // + une chance d’ajouter un consommable
+  if(rng.rand()<0.6){
+    const c = ITEMS.consumables[rng.between(0,ITEMS.consumables.length-1)];
+    out.push(makeItemInstance(c,RARITY.common));
+  }
+  return out;
+}
+
+// ----- Statuts récurrents -----
 function tickStatus(){
   state.status = state.status.filter(st=>{
     if(st.type==='poison'){ const d=rng.between(1,2); damage(d,'Poison'); st.dur--; }
@@ -182,7 +267,7 @@ function tickStatus(){
   });
 }
 
-// ===== Combat (stable) =====
+// ----- Combat -----
 function playerAtkMod(){ let m=0; if(state.cls==='Guerrier') m+=2; if(effFOR()>=3) m+=1; if(hasItem('Épée affûtée')) m+=1; return m; }
 function playerDef(){ return effDEF(); }
 function terrainPenalty(){ return state.locationKey==='marais' ? -1 : 0; }
@@ -191,7 +276,7 @@ function combat(mon){
   clearChoices();
   state.inCombat=true;
   state.enemy=JSON.parse(JSON.stringify(mon));
-  showVisual(mon.icon || 'enemy:bandit');
+  showVisual(mon.icon || mon.kind || 'bandit');
   write(`<b>${mon.name}</b> apparaît ! ❤️ ${mon.hp} — CA ${mon.ac||12}`,'warn');
   combatTurn();
 }
@@ -266,32 +351,39 @@ function afterCombat(){
   const e=state.enemy; state.inCombat=false; state.enemy=null;
   const gold=rng.between(e.tier||1, (e.tier||2)*3); const xp=rng.between((e.tier||1)*3, (e.tier||2)*6);
   changeGold(gold); gainXP(xp);
-  const r=rng.rand();
-  if(r<0.18 && !hasItem('Épée affûtée')) addItem('Épée affûtée','Lame affûtée',{FOR:+1},6,'weapon');
-  else if(r<0.30 && !hasItem('Bouclier en bois')) addItem('Bouclier en bois','Planche solide',{DEF:+1},5,'shield');
-  else if(r<0.42) { state.potions++; write('Tu trouves une potion.','good'); }
-  else if(r<0.50 && !hasItem('Cuir renforcé')) addItem('Cuir renforcé','Cuir robuste',{DEF:+2},8,'armor');
 
-  if(e.name.includes('Bandit')){ state.factions.outlaws = (state.factions.outlaws||0)-2; state.flags.rumors = (state.flags.rumors||0)+1; if(state.flags.rumors>=3 && !state.flags.campKnown){ state.flags.campKnown = true; write('🗡️ Tu localises le camp des Bandits.','info'); } }
+  // 45% chance d’un loot adapté au palier
+  if(rng.rand()<0.45){
+    const it = rollLoot(e.tier||2);
+    autoEquip(it);
+    write(`Butin: <b>${itDisplayName(it)}</b>.`,'good');
+  }else if(rng.rand()<0.25){
+    state.potions++; write('Tu trouves une potion.','good');
+  }
+
+  if(e.name.includes('Bandit')){
+    state.factions.outlaws = (state.factions.outlaws||0)-2;
+    state.flags.rumors = (state.flags.rumors||0)+1;
+    if(state.flags.rumors>=3 && !state.flags.campKnown){ state.flags.campKnown = true; write('🗡️ Tu localises le camp des Bandits.','info'); }
+  }
   explore();
 }
 
-// ===== Bestiaire =====
+// ----- Bestiaire -----
 const mobs = {
-  wolf: ()=>({ name:'Loup affamé', hp:10, maxHp:10, ac:11, hitMod:2, tier:1, icon:'enemy:wolf' }),
-  bandit: ()=>({ name:'Bandit des fourrés', hp:12, maxHp:12, ac:12, hitMod:3, tier:2, dotChance:0.1, dotType:'bleed', icon:'enemy:bandit' }),
-  boar:  ()=>({ name:'Sanglier irascible', hp:11, maxHp:11, ac:11, hitMod:2, tier:1, dotChance:0.05, dotType:'bleed', icon:'enemy:boar' }),
-  harpy: ()=>({ name:'Harpie du vent', hp:14, maxHp:14, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'bleed', icon:'enemy:harpy' }),
-  ghoul: ()=>({ name:'Goule des roseaux', hp:13, maxHp:13, ac:12, hitMod:3, tier:2, dotChance:0.25, dotType:'poison', icon:'enemy:ghoul' }),
-  specter: ()=>({ name:'Spectre antique', hp:15, maxHp:15, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'poison', icon:'enemy:specter' }),
-  ruinLord: ()=>({ name:'Seigneur des Ruines', hp:28, maxHp:28, ac:15, hitMod:6, tier:4, icon:'boss:ruinlord' }),
-  cinderLord: ()=>({ name:'Seigneur des Cendres', hp:30, maxHp:30, ac:15, hitMod:6, tier:4, dotChance:0.25, dotType:'bleed', icon:'boss:cinder' })
+  wolf: ()=>({ name:'Loup affamé', hp:10, maxHp:10, ac:11, hitMod:2, tier:1, kind:'wolf' }),
+  bandit: ()=>({ name:'Bandit des fourrés', hp:12, maxHp:12, ac:12, hitMod:3, tier:2, dotChance:0.1, dotType:'bleed', kind:'bandit' }),
+  boar:  ()=>({ name:'Sanglier irascible', hp:11, maxHp:11, ac:11, hitMod:2, tier:1, dotChance:0.05, dotType:'bleed', kind:'boar' }),
+  harpy: ()=>({ name:'Harpie du vent', hp:14, maxHp:14, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'bleed', kind:'harpy' }),
+  ghoul: ()=>({ name:'Goule des roseaux', hp:13, maxHp:13, ac:12, hitMod:3, tier:2, dotChance:0.25, dotType:'poison', kind:'ghoul' }),
+  specter: ()=>({ name:'Spectre antique', hp:15, maxHp:15, ac:13, hitMod:4, tier:2, dotChance:0.2, dotType:'poison', kind:'specter' }),
+  ruinLord: ()=>({ name:'Seigneur des Ruines', hp:28, maxHp:28, ac:15, hitMod:6, tier:4, kind:'ruinlord' }),
+  cinderLord: ()=>({ name:'Seigneur des Cendres', hp:30, maxHp:30, ac:15, hitMod:6, tier:4, dotChance:0.25, dotType:'bleed', kind:'cinder' })
 };
-// ===== Boss helpers =====
-function combatRuinLord(){ showVisual('boss:ruinlord'); write('🗿 Les pierres vibrent… le Seigneur des Ruines s’éveille.','warn'); combat(mobs.ruinLord()); }
-function combatCinderLord(){ showVisual('boss:cinder'); write('🔥 Les braises s’embrasent — le Seigneur des Cendres apparaît.','warn'); combat(mobs.cinderLord()); }
+function combatRuinLord(){ showVisual('ruinlord'); write('🗿 Les pierres vibrent… le Seigneur des Ruines s’éveille.','warn'); combat(mobs.ruinLord()); }
+function combatCinderLord(){ showVisual('cinder'); write('🔥 Les braises s’embrasent — le Seigneur des Cendres apparaît.','warn'); combat(mobs.cinderLord()); }
 
-// ===== Temps & monde =====
+// ----- Temps & monde -----
 function setTime(){
   const slots=['Aube','Matin','Midi','Après-midi','Crépuscule','Nuit'];
   const i=slots.indexOf(state.time); let n=(i+1)%slots.length; if(n===0){ state.day++; onNewDay(); }
@@ -301,7 +393,6 @@ function onNewDay(){
   state.daily.herbalist = true;
   state.daily.smith = true;
   state.daily.trader = true;
-  // Marchand itinérant : rotation légère
   if(rng.rand()<0.5) state.flags.offerBoatToday = true; else state.flags.offerBoatToday = false;
 }
 function continueBtn(){ clearChoices(); addChoice('Continuer', ()=>explore(), true); }
@@ -316,11 +407,7 @@ function gotoZone(key){
                    key==='ilot'?"Îlot du lac":
                    key==='camp'?"Camp des Bandits":
                    key==='sanctuaire'?"Sanctuaire des Cendres":"Mirval";
-  const placeMap = {
-    village:'place:village', foret:'place:forest', collines:'place:hills', marais:'place:swamp',
-    ruines:'place:ruins', observatoire:'place:observatory', ilot:'place:islet', camp:'place:camp', sanctuaire:'place:sanctum'
-  };
-  showVisual(placeMap[key]||'place:village');
+  showVisual(key);
   write(`👉 Tu te diriges vers <b>${state.location}</b>.`,'sys'); explore(true);
 }
 function pickWeighted(items, k){
@@ -332,7 +419,7 @@ function pickWeighted(items, k){
   return out;
 }
 
-// ===== Actions génériques =====
+// ----- Actions génériques -----
 function searchArea(){
   const bonus = effSAG()>=3?1:0;
   const {total}=d20(bonus);
@@ -353,23 +440,41 @@ function useItemMenu(){
     if(state.potions<=0){ write("Tu n'as pas de potion.",'warn'); return continueBtn(); }
     state.potions--; heal(rng.between(8,12)); continueBtn();
   }, true);
-  // Remèdes simples si Herboriste amie
-  if(state.factions.sanctum>=10){
-    addChoice('Baume maison (2 or → +4 PV)', ()=>{
-      if(state.gold>=2){ changeGold(-2); heal(4); }
-      else write("Pas assez d'or.",'warn');
-      continueBtn();
-    });
-  }
+
+  // Utiliser un consommable du sac
+  const consumables = state.inventory.filter(it=>it.use);
+  consumables.slice(0,5).forEach(it=>{
+    addChoice(`Utiliser ${it.name}`, ()=>{ it.use(); state.inventory = state.inventory.filter(x=>x!==it); setStats(); continueBtn(); });
+  });
+
+  addChoice('Équiper un objet', equipMenu);
+  addChoice('Retirer un équipement', unequipMenu);
   addChoice('Annuler', ()=>explore());
+}
+function equipMenu(){
+  clearChoices();
+  const eq = state.inventory.filter(it=>it.slot);
+  if(eq.length===0){ write("Tu n'as aucun équipement à porter.",'info'); return continueBtn(); }
+  eq.forEach(it=> addChoice(`Équiper ${itDisplayName(it)}`, ()=>{ equip(it); equipMenu(); }));
+  addChoice('Terminer', continueBtn, true);
+}
+function unequipMenu(){
+  clearChoices();
+  const eq = state.equipped;
+  if(eq.length===0){ write("Aucun équipement porté.",'info'); return continueBtn(); }
+  eq.forEach(it=> addChoice(`Retirer ${it.name}`, ()=>{ state.equipped = state.equipped.filter(x=>x!==it); state.inventory.push(it); setStats(); unequipMenu(); } ));
+  addChoice('Terminer', continueBtn, true);
 }
 function chest(){
   const r=rng.between(1,100);
-  if(r>92){ addItem('Bouclier en fer','Bouclier solide',{DEF:+2},9,'shield'); }
-  else if(r>75){ state.potions++; write('Tu trouves une potion.','good'); }
-  else if(r>45){ changeGold(rng.between(7,15)); }
-  else if(r>30){ addItem('Anneau terni','- bonus léger',{SAG:+1},6,'ring'); }
-  else { write('💥 Piège !','bad'); damage(rng.between(3,6),'Piège'); }
+  if(r>30){
+    const it = rollLoot(1 + Math.floor(state.level/2));
+    autoEquip(it); write(`Coffre: <b>${itDisplayName(it)}</b>.`,'good');
+  } else if(r>10){
+    changeGold(rng.between(7,15));
+  } else {
+    write('💥 Piège !','bad'); damage(rng.between(3,6),'Piège');
+  }
 }
 function randomEncounter(){
   const zone=state.locationKey;
@@ -386,101 +491,98 @@ function randomEncounter(){
   }
 }
 
-// ===== PNJ / Économie / Craft simple =====
+// ----- PNJ / Économie -----
 function priceWithRep(base, factionKey){
   const rep = state.factions[factionKey]||0;
   const mult = rep>=15?0.85 : rep<=-15?1.25 : 1;
   return Math.max(1, Math.round(base*mult));
 }
-function eventHerbalist(){
-  showVisual('npc:herbalist');
-  if(!state.daily.herbalist){ write("🌿 L’herboriste n’est plus là pour aujourd’hui.",'info'); return continueBtn(); }
-  write('🌿 Une herboriste te fait signe. Parfum de menthe.');
+function sellMenu(nextFn){
   clearChoices();
-  addChoice(`Tisane (soin) — ${priceWithRep(3,'sanctum')} or`, ()=>{
-    const cost=priceWithRep(3,'sanctum');
-    if(state.gold>=cost){ changeGold(-cost); heal(rng.between(6,12)); state.factions.sanctum+=1; state.daily.herbalist=false; }
-    else write("Pas assez d'or.",'warn');
-    continueBtn();
-  }, true);
-  addChoice(`Potion — ${priceWithRep(4,'sanctum')} or`, ()=>{
-    const cost=priceWithRep(4,'sanctum');
-    if(state.gold>=cost){ changeGold(-cost); state.potions++; state.factions.sanctum+=1; state.daily.herbalist=false; write("Tu obtiens une potion.",'good'); }
-    else write("Pas assez d'or.",'warn');
-    continueBtn();
-  });
-  addChoice('Extraire des herbes (craft)', ()=>{
-    const {total}=d20(effSAG()>=3?2:0);
-    if(total>=14){ const n=rng.between(1,2); state.flags.herbs=(state.flags.herbs||0)+n; write(`Tu récoltes ${n} herbe(s).`,'good'); }
-    else write("Rien d'utile aujourd’hui.",'info');
-    continueBtn();
-  });
-  addChoice('Partir', continueBtn);
-}
-function eventSmith(){
-  showVisual('npc:smith');
-  if(!state.daily.smith){ write("⚒️ Le forgeron range ses outils pour aujourd’hui.",'info'); return continueBtn(); }
-  write('⚒️ Un forgeron affûte une lame sur une enclume portative.');
-  clearChoices();
-  addChoice(`Améliorer arme (+1 FOR) — ${priceWithRep(6,'townsfolk')} or`, ()=>{
-    const cost=priceWithRep(6,'townsfolk');
-    if(state.gold>=cost){ changeGold(-cost); addItem('Épée affûtée','Lame affûtée',{FOR:+1},6,'weapon'); state.factions.townsfolk+=1; state.daily.smith=false; }
-    else write("Pas assez d'or.",'warn');
-    continueBtn();
-  }, true);
-  addChoice(`Bouclier en fer (+2 DEF) — ${priceWithRep(8,'townsfolk')} or`, ()=>{
-    const cost=priceWithRep(8,'townsfolk');
-    if(state.gold>=cost){ changeGold(-cost); addItem('Bouclier en fer','Acier cabossé',{DEF:+2},8,'shield'); state.factions.townsfolk+=1; state.daily.smith=false; }
-    else write("Pas assez d'or.",'warn');
-    continueBtn();
-  });
-  addChoice('Forger (minerai x2)', ()=>{
-    if((state.flags.ore||0)>=2){ state.flags.ore-=2; addItem('Cuir renforcé','Cuir robuste',{DEF:+2},8,'armor'); write('Tu forges une armure de fortune.','good'); state.daily.smith=false; }
-    else write('Il te faut du minerai (x2).','warn');
-    continueBtn();
-  });
-  addChoice('Discuter (+réputation Bourgeois)', ()=>{ state.factions.townsfolk+=2; write("Il t’indique des sentiers sûrs.",'info'); state.daily.smith=false; continueBtn(); });
-}
-function sellMenu(){
-  clearChoices();
-  const vendables = [...state.inventory, ...state.equipped].filter(it=>!['Barque','Relique du Guerrier','Relique du Sage','Relique de l’Eau'].includes(it.name));
-  if(vendables.length===0){ write("Tu n’as rien à vendre.",'info'); return continueBtn(); }
+  const vendables = [...state.inventory, ...state.equipped].filter(it=>!['Relique du Guerrier','Relique du Sage','Relique de l’Eau','Barque','Torche'].includes(it.name));
+  if(vendables.length===0){ write("Tu n’as rien à vendre.",'info'); return nextFn?nextFn():continueBtn(); }
   vendables.forEach(it=>{
     const base = Math.max(1, Math.floor((it.value||4)/2));
     const price = priceWithRep(base,'townsfolk');
-    addChoice(`Vendre ${it.name} (${price} or)`, ()=>{ if(removeFromCollections(it.name)){ changeGold(price); write(`Tu vends ${it.name}.`,'good'); } sellMenu(); });
+    addChoice(`Vendre ${itDisplayName(it)} (${price} or)`, ()=>{
+      if(removeFromCollections(it.name)){ changeGold(price); write(`Tu vends ${it.name}.`,'good'); }
+      sellMenu(nextFn);
+    });
   });
-  addChoice('Terminer', continueBtn, true);
+  addChoice('Terminer', ()=>{ if(nextFn) nextFn(); else continueBtn(); }, true);
 }
 function eventTrader(){
-  showVisual('npc:trader');
-  if(!state.daily.trader){ write("🧳 Le colporteur a plié bagage pour aujourd’hui.",'info'); return continueBtn(); }
+  showVisual('trader');
   write('🧳 Un colporteur déroule son tapis. "Tout a un prix."');
-  clearChoices();
-  addChoice(`Torche — ${priceWithRep(5,'townsfolk')} or`, ()=>{
-    const cost=priceWithRep(5,'townsfolk');
-    if(state.gold>=cost){ changeGold(-cost); state.flags.torch=true; addItem('Torche','Permet d’explorer les ruines sombres',{},2,null); state.factions.townsfolk+=1; state.daily.trader=false; write('Tu obtiens une torche.','good'); }
-    else write("Pas assez d'or.",'warn');
-    continueBtn();
-  }, true);
-  addChoice(`Barque — ${priceWithRep(9,'townsfolk')} or`, ()=>{
-    const cost=priceWithRep(9,'townsfolk');
-    if(!state.flags.offerBoatToday){ write("La barque n’est pas disponible aujourd’hui.",'info'); return continueBtn(); }
-    if(state.gold>=cost){ changeGold(-cost); state.flags.boat=true; addItem('Barque','Permet d’atteindre l’îlot du lac',{},6,null); state.factions.townsfolk+=1; state.daily.trader=false; write('Tu obtiens une petite barque pliable.','good'); }
-    else write("Pas assez d'or.",'warn');
-    continueBtn();
-  });
-  addChoice('Acheter matériel (minerai 3 or / herbe 2 or)', ()=>{
+  const stock = genStock(rng.between(3,5));
+  function menu(){
     clearChoices();
-    addChoice('Acheter 1 minerai (3 or)', ()=>{ if(state.gold>=3){ changeGold(-3); state.flags.ore=(state.flags.ore||0)+1; write('Tu obtiens 1 minerai.','good'); } sellMenu(); });
-    addChoice('Acheter 1 herbe (2 or)', ()=>{ if(state.gold>=2){ changeGold(-2); state.flags.herbs=(state.flags.herbs||0)+1; write('Tu obtiens 1 herbe.','good'); } sellMenu(); });
+    // Articles dynamiques
+    stock.forEach((it,idx)=>{
+      const cost = priceWithRep(Math.max(1, it.value), 'townsfolk');
+      addChoice(`Acheter ${itDisplayName(it)} — ${cost} or`, ()=>{
+        if(state.gold>=cost){ changeGold(-cost); autoEquip(it); stock.splice(idx,1); write(`Achat réussi.`,`good`); menu(); }
+        else { write("Pas assez d'or.",'warn'); menu(); }
+      });
+    });
+    // Articles fixes (qualité du monde)
+    addChoice(`Torche — ${priceWithRep(5,'townsfolk')} or`, ()=>{
+      const cost=priceWithRep(5,'townsfolk');
+      if(state.gold>=cost){ changeGold(-cost); state.flags.torch=true; write('Tu obtiens une torche (utile dans les ruines).','good'); menu(); }
+      else { write("Pas assez d'or.",'warn'); menu(); }
+    });
+    addChoice(`Barque — ${priceWithRep(9,'townsfolk')} or`, ()=>{
+      const cost=priceWithRep(9,'townsfolk');
+      if(!state.flags.offerBoatToday){ write("La barque n’est pas disponible aujourd’hui.",'info'); return menu(); }
+      if(state.gold>=cost){ changeGold(-cost); state.flags.boat=true; write('Tu obtiens une petite barque pliable (accès à l’îlot).','good'); menu(); }
+      else { write("Pas assez d'or.",'warn'); menu(); }
+    });
+
+    addChoice('Vendre des objets', ()=> sellMenu(menu));
     addChoice('Terminer', continueBtn, true);
-  });
-  addChoice('Vendre un objet', ()=> sellMenu());
-  addChoice('Partir', continueBtn);
+  }
+  menu();
+}
+function eventSmith(){
+  showVisual('smith');
+  write('⚒️ Un forgeron inspecte tes armes avec un œil expert.');
+  function menu(){
+    clearChoices();
+    const up1 = { name:'Améliorer arme (+1 FOR)', cost:priceWithRep(6,'townsfolk'), fn:()=> addItem('Épée affûtée','Lame affûtée',{FOR:+2},9,'weapon') };
+    const up2 = { name:'Bouclier en fer (+2 DEF)', cost:priceWithRep(8,'townsfolk'), fn:()=> addItem('Bouclier en fer','Acier cabossé',{DEF:+2},9,'shield') };
+    addChoice(`${up1.name} — ${up1.cost} or`, ()=>{ if(state.gold>=up1.cost){ changeGold(-up1.cost); up1.fn(); write('Affûtage terminé.','good'); } else write("Pas assez d'or.",'warn'); menu(); }, true);
+    addChoice(`${up2.name} — ${up2.cost} or`, ()=>{ if(state.gold>=up2.cost){ changeGold(-up2.cost); up2.fn(); write('Bouclier livré.','good'); } else write("Pas assez d'or.",'warn'); menu(); });
+    addChoice('Forger (minerai x2 → armure +2 DEF)', ()=>{
+      if((state.flags.ore||0)>=2){ state.flags.ore-=2; addItem('Cuir renforcé','Cuir robuste',{DEF:+2},8,'armor'); write('Tu forges une armure de fortune.','good'); }
+      else write('Il te faut du minerai (x2).','warn');
+      menu();
+    });
+    addChoice('Discuter (rép +2 bourgs)', ()=>{ state.factions.townsfolk+=2; write("Le forgeron te confie quelques routes sûres.",'info'); menu(); });
+    addChoice('Terminer', continueBtn);
+  }
+  menu();
+}
+function eventHerbalist(){
+  showVisual('herbalist');
+  write('🌿 Une herboriste te fait signe. Parfum de menthe.');
+  function menu(){
+    clearChoices();
+    const costTis = priceWithRep(3,'sanctum');
+    const costPot = priceWithRep(4,'sanctum');
+    addChoice(`Tisane (soin 6-12) — ${costTis} or`, ()=>{ if(state.gold>=costTis){ changeGold(-costTis); heal(rng.between(6,12)); state.factions.sanctum+=1; } else write("Pas assez d'or.",'warn'); menu(); }, true);
+    addChoice(`Potion — ${costPot} or`, ()=>{ if(state.gold>=costPot){ changeGold(-costPot); state.potions++; state.factions.sanctum+=1; write("Tu obtiens une potion.",'good'); } else write("Pas assez d'or.",'warn'); menu(); });
+    addChoice('Récolter des herbes (test SAG)', ()=>{
+      const {total}=d20(effSAG()>=3?2:0);
+      if(total>=14){ const n=rng.between(1,2); state.flags.herbs=(state.flags.herbs||0)+n; write(`Tu récoltes ${n} herbe(s).`,'good'); }
+      else write("Rien d'utile aujourd’hui.",'info');
+      menu();
+    });
+    addChoice('Terminer', continueBtn);
+  }
+  menu();
 }
 function eventBard(){
-  showVisual('npc:bard');
+  showVisual('bard');
   write('🎻 Un barde sourit : "Une chanson contre deux pièces ?"');
   clearChoices();
   addChoice('Écouter (2 or)', ()=>{
@@ -491,7 +593,7 @@ function eventBard(){
   addChoice('L’ignorer', continueBtn);
 }
 function eventHermit(){
-  showVisual('npc:hermit');
+  showVisual('hermit');
   write('🧙 Un ermite t’observe au détour d’un sentier.');
   clearChoices();
   addChoice('Accepter sa décoction', ()=>{
@@ -499,7 +601,7 @@ function eventHermit(){
     else damage(rng.between(2,5),'Nausée');
     continueBtn();
   }, true);
-  addChoice('Breloque (5 or)', ()=>{
+  addChoice(`Breloque (5 or)`, ()=>{
     const cost=priceWithRep(5,'sanctum');
     if(state.gold>=cost){ changeGold(-cost); addItem("Breloque d'ermite","Chance & clairvoyance",{SAG:+1},5,'charm'); state.factions.sanctum+=1; }
     else write("Pas assez d'or.",'warn');
@@ -508,7 +610,7 @@ function eventHermit(){
   addChoice('Refuser', continueBtn);
 }
 function eventSanctuary(){
-  showVisual('place:sanctum');
+  showVisual('sanctuaire');
   write('⛪ Un ancien sanctuaire, couvert de mousse.');
   clearChoices();
   addChoice('Prier', ()=>{
@@ -545,25 +647,26 @@ function eventPeasant(){
   addChoice('L’ignorer', ()=>{ rep(-3); state.factions.townsfolk-=2; continueBtn(); });
 }
 function eventTrap(){ write('🪤 Une corde s’enroule à ta cheville !'); const {total}=d20(effAGI()>=3?2:0); if(total>=13) write('Tu t’en sors de justesse.','good'); else damage(rng.between(2,5),'Piège'); }
+
+// ----- Lieux liés aux reliques -----
 function eventRuins(){
-  showVisual('place:ruins');
+  showVisual('ruines');
   write('🏚️ Des ruines englouties de lierre se dressent.');
   clearChoices();
-  addChoice('Fouiller', ()=>{
+  addChoice('Fouiller (besoin: Torche)', ()=>{
+    if(!state.flags.torch){ write("Il fait trop sombre sans <b>Torche</b>.","warn"); return continueBtn(); }
     const {total}=d20(effSAG()>=3?1:0);
     if(total>=16){
       if(!state.flags.relicWarrior){ state.flags.relicWarrior=true; addItem('Relique du Guerrier','Fragment d’acier ancien',{},0,null); write('⚔️ Tu obtiens la <b>Relique du Guerrier</b>.','good'); }
-      else changeGold(rng.between(4,9));
+      else { const it=rollLoot(2); autoEquip(it); write(`Tu trouves ${itDisplayName(it)}.`,`good`); }
     } else if(total>=10){ chest(); }
     else { damage(rng.between(2,5),'Éboulement'); }
     continueBtn();
   }, true);
   addChoice('Partir', continueBtn);
 }
-
-// ===== Lieux uniques =====
 function eventObservatory(){
-  showVisual('place:observatory');
+  showVisual('observatoire');
   write('🔭 La Tour de l’Observatoire pointe vers un ciel tourmenté.');
   clearChoices();
   addChoice('Résoudre l’énigme des astres', ()=>{
@@ -576,8 +679,8 @@ function eventObservatory(){
   addChoice('Partir', continueBtn);
 }
 function eventIslet(){
-  showVisual('place:islet');
-  if(!state.flags.boat){ write("Le lac t’empêche d’avancer. Il te faudrait une <b>barque</b>.","warn"); return continueBtn(); }
+  showVisual('ilot');
+  if(!state.flags.boat){ write("Le lac t’empêche d’avancer. Il te faudrait une <b>Barque</b>.","warn"); return continueBtn(); }
   write('🌊 Tu atteins l’îlot. Une lueur bleue pulse sous l’eau.');
   clearChoices();
   addChoice('Plonger prudemment', ()=>{
@@ -590,18 +693,18 @@ function eventIslet(){
   addChoice('Partir', continueBtn);
 }
 function eventBanditCamp(){
-  showVisual('place:camp');
+  showVisual('camp');
   write('⛺ Le camp des bandits bruisse de voix. Torches et silhouettes armées.');
   clearChoices();
-  addChoice('Infiltration (DEX)', ()=>{
+  addChoice('Infiltration (AGI)', ()=>{
     const {total}=d20(effAGI()>=3?2:0);
-    if(total>=15){ write('Tu te faufiles entre les tentes.','good'); if(!state.flags.campLooted){ changeGold(rng.between(6,12)); state.flags.campLooted=true; } }
+    if(total>=15){ write('Tu te faufiles entre les tentes.','good'); if(!state.flags.campLooted){ changeGold(rng.between(6,12)); const it=rollLoot(2); autoEquip(it); state.flags.campLooted=true; write(`Butin: ${itDisplayName(it)}.`,`good`); } }
     else { write('Repéré !','bad'); combat(mobs.bandit()); return; }
     continueBtn();
   }, true);
   addChoice('Défier le Chef', ()=>{
     write('Un silence tombe sur le camp…','warn');
-    combat({ ...mobs.bandit(), name:'Chef Bandit', hp:24, maxHp:24, ac:14, hitMod:5, tier:3, icon:'enemy:bandit', dotChance:0.2, dotType:'bleed' });
+    combat({ ...mobs.bandit(), name:'Chef Bandit', hp:24, maxHp:24, ac:14, hitMod:5, tier:3, dotChance:0.2, dotType:'bleed' });
   });
   addChoice('Négocier (réputation sombre)', ()=>{
     if(state.rep<=-10){ changeGold(-3); state.factions.outlaws+=4; write('Ils acceptent ton “tribut”.','info'); }
@@ -610,7 +713,7 @@ function eventBanditCamp(){
   });
 }
 function eventSanctuaryCinders(){
-  showVisual('place:sanctum');
+  showVisual('sanctuaire');
   write('🔥 Au cœur du sanctuaire, des cendres tièdes tracent un cercle ancien.');
   clearChoices();
   addChoice('Invoquer le Seigneur des Cendres', ()=>{
@@ -623,9 +726,8 @@ function eventSanctuaryCinders(){
   addChoice('Prier (petit soin)', ()=>{ heal(rng.between(3,6)); continueBtn(); });
   addChoice('Partir', continueBtn);
 }
-// ===== Exploration (progression & gating) =====
+// ----- Exploration & progression -----
 function maybeAdvanceMainQuest(){
-  // Quête principale : Les Cendres de Mirval
   if(state.flags.relicWarrior && state.flags.relicSage && state.flags.relicWater){
     if(!state.flags.cindersUnlocked){
       state.flags.cindersUnlocked = true;
@@ -699,7 +801,6 @@ function navForZone(){
   add('→ Sanctuaire des Cendres', 'sanctuaire', state.flags.cindersUnlocked);
   return nav;
 }
-
 function explore(initial=false){
   setStats();
   ui.loc.textContent = state.location;
@@ -714,26 +815,27 @@ function explore(initial=false){
   if(state.day>=5 && !state.flags.oracleSeen){ eventOracle(); return; }
 
   const zone = state.locationKey;
-
   const base = [
     { label:"Fouiller", act:searchArea, w:2 },
     { label:"Se reposer", act:rest, w:1 },
     { label:"Utiliser un objet", act:useItemMenu, w:1 },
     { label:"Rencontre immédiate", act:randomEncounter, w:2 }
   ];
-
   const pool = zonePool(zone);
   const nav = navForZone();
 
   const dyn = pickWeighted(pool, Math.min(3, pool.length||0));
   const candidates = [...base, ...dyn, ...nav];
   const shown = pickWeighted(candidates, Math.min(5, candidates.length||5));
+
+  // S'assurer d'au moins un événement dynamique pour éviter la monotonie
   const dynLabels = new Set(dyn.map(d=>d.label));
   if(!shown.some(s=>dynLabels.has(s.label)) && dyn.length>0) shown[0] = dyn[0];
+
   shown.forEach((c,i)=> addChoice(c.label, c.act, i===0));
 }
 
-// ===== Oracle & fins =====
+// ----- Oracle & fins -----
 function eventOracle(){
   write('🔮 Une voyante apparaît dans tes rêves.'); 
   clearChoices();
@@ -747,7 +849,7 @@ function ending(){
   addChoice('Rejouer (New Game+)', ()=>{ const st=initialState(); st.attrs.FOR++; st.attrs.AGI++; st.attrs.SAG++; state=st; ui.log.innerHTML=''; setup(true); }, true);
 }
 
-// ===== Choix de classe (affiché au démarrage) =====
+// ----- Choix de classe -----
 function chooseClass(){
   clearChoices();
   write('Choisis ta classe :','info');
@@ -779,7 +881,7 @@ function chooseClass(){
   }));
 }
 
-// ===== État initial =====
+// ----- État initial -----
 function initialState(){
   return {
     name:'Eldarion', cls:'—',
@@ -802,7 +904,7 @@ function initialState(){
       relicWarrior:false, relicSage:false, relicWater:false,
       cindersUnlocked:false, oracleSeen:false,
       peasantSaved:false, campLooted:false, sanctuaryFavor:false,
-      ore:0, herbs:0, offerBoatToday:true
+      ore:0, herbs:0, offerBoatToday:true, rumors:0
     },
     quests:{ 
       main:{title:'Les Cendres de Mirval',state:'Se préparer au voyage'},
@@ -816,7 +918,15 @@ function initialState(){
 }
 let state = initialState();
 
-// ===== Setup / boucle =====
+// ----- AddItem helper (après initialState pour accéder à state) -----
+function addItem(name,desc,mods={},value=4,slot=null){
+  const it={name,desc,mods,value,slot};
+  autoEquip(it);
+  write(`Tu obtiens <b>${name}</b>.`,'good');
+}
+function hasItem(name){ return state.inventory.some(i=>i.name===name) || state.equipped.some(i=>i.name===name); }
+
+// ----- Setup / boucle -----
 function setup(isNew=false){
   setStats();
   ui.loc.textContent = state.location;
@@ -824,17 +934,17 @@ function setup(isNew=false){
   clearChoices();
 
   if (isNew){
-    showVisual('place:village');
-    write('v10 — Nouvelle partie : choisis ta classe.','sys');
+    showVisual('village');
+    write('v10++ — Nouvelle partie : choisis ta classe.','sys');
     chooseClass(); return;
   }
   const classes=['Guerrier','Voleur','Paladin','Rôdeur','Mystique'];
   if(!state.cls || state.cls==='—' || !classes.includes(state.cls)){
-    write('v10 — Choisis ta classe pour commencer.','sys'); chooseClass(); return;
+    write('v10++ — Choisis ta classe pour commencer.','sys'); chooseClass(); return;
   }
   explore(true);
 }
-function startAdventure(){ ui.log.innerHTML=''; showVisual('place:village'); write("L'aventure commence !",'info'); setStats(); explore(true); }
+function startAdventure(){ ui.log.innerHTML=''; showVisual('village'); write("L'aventure commence !",'info'); setStats(); explore(true); }
 function gameOver(){ state.inCombat=false; write('<b>☠️ Tu t’effondres… Le silence retombe sur Mirval.</b>','bad'); clearChoices(); addChoice('♻️ Recommencer',()=>{ state=initialState(); ui.log.innerHTML=''; setup(true); }, true); }
 
 // Cooldown de compétence à chaque exploration
