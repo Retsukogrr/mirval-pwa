@@ -1314,3 +1314,202 @@ if(typeof eventWitchGate==='function'){
     _wg();
   };
 }
+/* ============================================================
+   v10 — Death-lock Patch (à coller tout en bas de game.js)
+   - Bloque toute action quand PV <= 0
+   - Affiche uniquement "Recommencer"
+   - Relance une partie propre sur restart
+   ============================================================ */
+(function(){
+  // S'assure que le flag existe
+  if (typeof state === 'object' && state) state.dead = !!state.dead;
+
+  // On garde les originaux
+  const _addChoice   = addChoice;
+  const _exploreCore = explore;
+  const _combatTurn  = typeof combatTurn === 'function' ? combatTurn : null;
+  const _continueBtn = continueBtn;
+  const _damage      = damage;
+
+  // Empêche d'ajouter des boutons (sauf "Recommencer") si mort
+  addChoice = function(label, cb, primary=false){
+    if (state.dead && !/Recommencer|Restart|Rejouer/i.test(label)) return;
+    _addChoice(label, cb, primary);
+  };
+
+  // Coupe l'exploration si mort
+  explore = function(...args){
+    if (state.dead) return;
+    _exploreCore(...args);
+  };
+
+  // Coupe le tour de combat si mort
+  if (_combatTurn) {
+    const _combatTurnOrig = _combatTurn;
+    combatTurn = function(...args){
+      if (state.dead) return;
+      _combatTurnOrig(...args);
+    };
+  }
+
+  // "Continuer" devient "Recommencer" si mort
+  continueBtn = function(next=()=>explore()){
+    if (state.dead){
+      clearChoices();
+      _addChoice('Recommencer', ()=>{
+        state = initialState();
+        state.dead = false;
+        clearLog();
+        setup(true);
+      }, true);
+      return;
+    }
+    _continueBtn(next);
+  };
+
+  // Si on subit des dégâts fatals, on pose le flag dead
+  damage = function(n, src=""){
+    const died = _damage(n, src);    // appelle gameOver si hp <= 0 dans certaines versions
+    if (state.hp <= 0) state.dead = true;
+    return died;
+  };
+
+  // Redéfinit gameOver pour verrouiller totalement
+  gameOver = function(){
+    state.inCombat = false;
+    state.dead = true;
+    write('<b>☠️ Tu succombes…</b>', 'bad');
+    clearChoices();
+    _addChoice('Recommencer', ()=>{
+      state = initialState();
+      state.dead = false;
+      clearLog();
+      setup(true);
+    }, true);
+  };
+})();
+/* ============================================================
+   v10 — Extra Mobs Encounter Patch
+   - Rend les ennemis ajoutés (ours, squelette, sectateur, farfae,
+     grondeuse des tourbières, bandit d’élite…) réellement rencontrables
+   - Ajoute des boutons de combat directs par zone
+   - Enrichit randomEncounter() pour piocher les nouveaux mobs
+   - Garantit au moins 1 combat proposé si possible
+   ============================================================ */
+(function(){
+
+  // 1) Assure la présence des générateurs d’ennemis étendus
+  const _extraMobs = (typeof extraMobs!=='undefined' && extraMobs) ? extraMobs : {
+    bear:        ()=>({ name:"Ours brun", hp:16, maxHp:16, ac:12, hitMod:4, tier:2 }),
+    sprite:      ()=>({ name:"Farfae des lys", hp:9,  maxHp:9,  ac:14, hitMod:3, tier:1, dotChance:0.15, dotType:'bleed' }),
+    skeleton:    ()=>({ name:"Squelette ancien", hp:14, maxHp:14, ac:13, hitMod:4, tier:2 }),
+    cultist:     ()=>({ name:"Sectateur voilé", hp:15, maxHp:15, ac:12, hitMod:5, tier:3 }),
+    mireHag:     ()=>({ name:"Grondeuse des tourbières", hp:20, maxHp:20, ac:13, hitMod:5, tier:3, dotChance:0.25, dotType:'poison' }),
+    banditElite: ()=>({ name:"Bandit d’élite", hp:18, maxHp:18, ac:13, hitMod:5, tier:3 })
+  };
+  function mobEx(key){ return _extraMobs[key](); }
+
+  // 2) Patch randomEncounter() pour inclure les nouveaux ennemis
+  const _randomEncounter = (typeof randomEncounter==='function') ? randomEncounter : null;
+  randomEncounter = function(){
+    // 60% combat, 40% social/événement
+    if(rng.rand()<0.6){
+      const z = state.locationKey;
+      if(z==='marais'){
+        // marais : goules + grondeuse
+        return combat( rng.rand()<0.6 ? mobTemplates.ghoul() : mobEx('mireHag') );
+      } else if(z==='ruines'){
+        // ruines : squelette / sectateur / bandit
+        const pool=[mobEx('skeleton'), mobEx('cultist'), mobTemplates.bandit()];
+        return combat( pool[rng.between(0,pool.length-1)] );
+      } else if(z==='colline'){
+        // colline : harpie / ours
+        return combat( rng.rand()<0.5 ? mobTemplates.harpy() : mobEx('bear') );
+      } else if(z==='grotte'){
+        // grotte : goule ancienne / squelette
+        return combat( rng.rand()<0.55 ? mobTemplates.ancientGhoul() : mobEx('skeleton') );
+      } else {
+        // clairière & défaut : bandit / sanglier / farfae / ours
+        const pool=[mobTemplates.bandit(), mobTemplates.boar(), mobEx('sprite'), mobEx('bear')];
+        return combat( pool[rng.between(0,pool.length-1)] );
+      }
+    } else {
+      // Sinon, laisser l’existant gérer le social si présent
+      if(_randomEncounter){ return _randomEncounter(); }
+      // fallback social minimal si la version de base n’existe pas
+      [eventSanctuary,eventHerbalist,eventSmith,eventHermit,eventBard][rng.between(0,4)]();
+    }
+  };
+
+  // 3) Patch explore() pour injecter des combats directs par zone
+  const _exploreCore = explore;
+  explore = function(initial=false){
+    _exploreCore(initial);
+
+    // Lis les labels actuels pour éviter doublons
+    const buttons = Array.from(document.querySelectorAll('#choices button')).map(b=>b.textContent);
+    const hasDirectFight = buttons.some(t=>/Traquer|Affronter|Combattre|Trouver un combat/i.test(t));
+
+    // Si aucune option de combat direct n’a été proposée, on en ajoute 1-2 selon la zone
+    if(!hasDirectFight){
+      const z = state.locationKey;
+      if(z==='marais'){
+        addChoice('Affronter une grondeuse des tourbières', ()=>combat(mobEx('mireHag')));
+        addChoice('Traquer une goule', ()=>combat(mobTemplates.ghoul()));
+      }
+      else if(z==='ruines'){
+        addChoice('Combattre un squelette ancien', ()=>combat(mobEx('skeleton')));
+        addChoice('Affronter un sectateur voilé', ()=>combat(mobEx('cultist')));
+      }
+      else if(z==='colline'){
+        addChoice('Chasser un ours', ()=>combat(mobEx('bear')));
+        addChoice('Affronter une harpie', ()=>combat(mobTemplates.harpy()));
+      }
+      else if(z==='grotte'){
+        addChoice('Affronter une goule ancienne', ()=>combat(mobTemplates.ancientGhoul()));
+        addChoice('Combattre un squelette ancien', ()=>combat(mobEx('skeleton')));
+      }
+      else {
+        // clairière / défaut
+        addChoice('Affronter un bandit', ()=>combat(mobTemplates.bandit()));
+        addChoice('Trouver un farfae', ()=>combat(mobEx('sprite')));
+      }
+    }
+
+    // Secours : si, malgré tout, aucun bouton de combat n’est visible, injecter un bouton générique
+    const stillNoFight = Array.from(document.querySelectorAll('#choices button'))
+      .every(b => !/Traquer|Affronter|Combattre|Trouver un combat|Chasser/i.test(b.textContent));
+    if(stillNoFight){
+      addChoice('Trouver un combat (aléatoire)', ()=>{
+        const pools = [
+          mobTemplates.bandit(), mobTemplates.wolf?mobTemplates.wolf():mobTemplates.boar(),
+          mobEx('bear'), mobEx('sprite'), mobEx('skeleton')
+        ];
+        combat(pools[rng.between(0,pools.length-1)]);
+      });
+    }
+  };
+
+  // 4) Mise à jour des contrats de guilde (si existants) pour reconnaître les nouveaux types
+  if(typeof afterCombat==='function'){
+    const _afterCombat = afterCombat;
+    afterCombat = function(){
+      // Marque les kills pour les contrats étendus
+      if(state.quests?.board?.length){
+        const en = (state.enemy?.name||'').toLowerCase();
+        state.quests.board.forEach(c=>{
+          if((c.type==='bandit'   && en.includes('bandit'))   ||
+             (c.type==='wolf'     && en.includes('loup'))     ||
+             (c.type==='bear'     && en.includes('ours'))     ||
+             (c.type==='skeleton' && en.includes('squelette'))){
+            c.got = (c.got||0)+1;
+            if(c.got>=c.need){ changeGold(c.reward); c.done=true; write(`Contrat accompli ! +${c.reward} or`,'good'); }
+          }
+        });
+        state.quests.board = state.quests.board.filter(c=>!c.done);
+      }
+      _afterCombat();
+    };
+  }
+
+})();
