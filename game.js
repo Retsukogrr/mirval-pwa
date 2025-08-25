@@ -825,3 +825,358 @@ setInterval(()=>{
     bindUI(); setup(true);
   }
 })();
+/* ============================================================
+   Mirval v10 — Content Pack (EXTENDED)
+   À coller À LA FIN de game.js v10 (après le boot).
+   Ajouts non intrusifs : +PNJ, +rencontres, +objets, +contrats,
+   +marchands, +combats, mini-boss, cohérence renforcée.
+   ============================================================ */
+
+/* ---------- Nouvelles créatures (sans casser l’existant) ---------- */
+const extraMobs = {
+  bear:        ()=>({ name:"Ours brun", hp:16, maxHp:16, ac:12, hitMod:4, tier:2 }),
+  sprite:      ()=>({ name:"Farfae des lys", hp:9,  maxHp:9,  ac:14, hitMod:3, tier:1, dotChance:0.15, dotType:'bleed' }),
+  skeleton:    ()=>({ name:"Squelette ancien", hp:14, maxHp:14, ac:13, hitMod:4, tier:2 }),
+  cultist:     ()=>({ name:"Sectateur voilé", hp:15, maxHp:15, ac:12, hitMod:5, tier:3 }),
+  mireHag:     ()=>({ name:"Grondeuse des tourbières", hp:20, maxHp:20, ac:13, hitMod:5, tier:3, dotChance:0.25, dotType:'poison' }),
+  banditElite: ()=>({ name:"Bandit d’élite", hp:18, maxHp:18, ac:13, hitMod:5, tier:3 })
+};
+// accès simple dans le code
+function mobEx(name){ return extraMobs[name](); }
+
+/* ---------- Nouveaux objets & petites aides ---------- */
+function priceOf(it){
+  const base = 2 + (it.mods?.atk||0) + (it.mods?.def||0) + (it.heal?1:0);
+  return Math.max(1, base);
+}
+function addIfNotOwned(name, desc, mods){
+  if(!hasItem(name)) addItem(name,desc,mods);
+}
+
+// Quelques “nouveaux” items proposés par PNJ/loot
+const shopItems = {
+  dagger:      {name:"Dague fine", desc:"+1 ATQ (léger)", mods:{atk:1}},
+  longsword:   {name:"Épée longue", desc:"+2 ATQ", mods:{atk:2}},
+  oakShield:   {name:"Bouclier de chêne", desc:"+1 DEF", mods:{def:1}},
+  chainMail:   {name:"Cotte de mailles", desc:"+3 DEF", mods:{def:3}},
+  swiftBoots:  {name:"Bottes véloces", desc:"Esquive + (AGI check)", mods:{def:1}},
+  warHorn:     {name:"Cor de guerre", desc:"+1 ATQ ce combat (consommable)"},
+  balm:        {name:"Baume curatif", desc:"Soin 6-10 PV", heal:true}
+};
+
+/* ---------- Rencontres PNJ supplémentaires ---------- */
+function eventHunter(){
+  clearChoices();
+  write("🏹 Un chasseur t’accoste près d’un collet.");
+  addChoice("Acheter une dague (4 or)", ()=>{
+    if(state.gold>=4){ changeGold(-4); addItem(shopItems.dagger.name,shopItems.dagger.desc,shopItems.dagger.mods); }
+    else write("Pas assez d’or.","warn");
+    continueBtn();
+  }, true);
+  addChoice("Prendre une leçon (2 or → +2 au prochain jet d’attaque)", ()=>{
+    if(state.gold>=2){ changeGold(-2); state._tempAtkBuff = 2; write("Tu te sens plus sûr de toi.","good"); }
+    else write("Pas assez d’or.","warn");
+    continueBtn();
+  });
+  addChoice("Partir", continueBtn);
+}
+
+function eventPriest(){
+  clearChoices();
+  write("⛪ Un prêtre propose une bénédiction.");
+  addChoice("Donner 2 or (soin 6-10)", ()=>{
+    if(state.gold>=2){ changeGold(-2); heal(rng.between(6,10)); rep(+1); }
+    else write("Pas assez d’or.","warn");
+    continueBtn();
+  }, true);
+  addChoice("Confesser (réputation +2 / -2 selon ton état)", ()=>{
+    if(state.rep<=-10){ rep(+2); write("Tu te sens plus léger…","good"); }
+    else { rep(-2); write("L’humilité t’est recommandée…","warn"); }
+    continueBtn();
+  });
+  addChoice("Refuser", continueBtn);
+}
+
+function eventScholar(){
+  clearChoices();
+  write("📚 Un érudit collecte des fragments.");
+  addChoice("Échanger 1 fragment → 8 or", ()=>{
+    if(state.flags.fragments>0){ state.flags.fragments--; changeGold(8); setStats(); }
+    else write("Tu n’as pas de fragment.","warn");
+    continueBtn();
+  }, true);
+  addChoice("Demander des rumeurs", ()=>{
+    write("“On murmure qu’un passage s’ouvre quand trois éclats brillent…”",'info');
+    continueBtn();
+  });
+  addChoice("Partir", continueBtn);
+}
+
+function eventBlackMarket(){
+  clearChoices();
+  write("🕯️ Un marché noir s’ouvre dans une ruelle sombre.");
+  addChoice("Acheter Épée longue (9 or, +2 ATQ)", ()=>{
+    if(state.gold>=9){ changeGold(-9); addItem(shopItems.longsword.name,shopItems.longsword.desc,shopItems.longsword.mods); }
+    else write("Pas assez d’or.","warn");
+    continueBtn(eventBlackMarket);
+  }, true);
+  addChoice("Acheter Cotte de mailles (10 or, +3 DEF)", ()=>{
+    if(state.gold>=10){ changeGold(-10); addItem(shopItems.chainMail.name,shopItems.chainMail.desc,shopItems.chainMail.mods); }
+    else write("Pas assez d’or.","warn");
+    continueBtn(eventBlackMarket);
+  });
+  addChoice("Vendre un objet (prix noir +1)", ()=>{
+    if(!state.inventory.length){ write("Rien à vendre.","info"); return continueBtn(eventBlackMarket); }
+    clearChoices(); write("Que veux-tu vendre ?");
+    state.inventory.forEach((it,idx)=>{
+      const val = priceOf(it)+1;
+      addChoice(`${it.name} (+${val} or)`, ()=>{
+        state.inventory.splice(idx,1); changeGold(val); setStats(); write("Vendu.","good"); continueBtn(eventBlackMarket);
+      });
+    });
+    addChoice("Retour", eventBlackMarket);
+  });
+  addChoice("Partir", continueBtn);
+}
+
+function eventStoneCircle(){
+  clearChoices();
+  write("🪨 Un cercle de pierres résonne d’un bourdonnement sourd.");
+  addChoice("Tenter un rituel (jet ESPRIT)", ()=>{
+    const {total}=d20(state.attrs.WIS>=3?2:0);
+    if(total>=15){ heal(rng.between(5,10)); write("Une chaleur t’enveloppe.","good"); }
+    else { damage(rng.between(3,6),"Résonance"); }
+    continueBtn();
+  }, true);
+  addChoice("Graver une offrande (2 or)", ()=>{
+    if(state.gold>=2){ changeGold(-2); rep(+2); write("Les pierres semblent te reconnaître.","info"); }
+    else write("Pas assez d’or.","warn");
+    continueBtn();
+  });
+  addChoice("Partir", continueBtn);
+}
+
+function eventBridgeToll(){
+  clearChoices();
+  write("🌉 Un péage de fortune barre un vieux pont.");
+  addChoice("Payer 2 or et passer", ()=>{
+    if(state.gold>=2){ changeGold(-2); write("Le passeur hoche la tête.","info"); }
+    else write("Pas assez d’or.","warn");
+    continueBtn();
+  }, true);
+  addChoice("Refuser → combat", ()=>{ combat(mobEx('banditElite')); });
+  addChoice("Tenter de négocier (jet ESPRIT)", ()=>{
+    const {total}=d20(state.attrs.WIS>=3?2:0);
+    if(total>=14){ write("Ils te laissent passer, amusés.","good"); rep(+1); }
+    else { write("Ils se fâchent !","warn"); combat(mobEx('banditElite')); }
+  });
+}
+
+function eventFair(){
+  clearChoices();
+  write("🎪 Une petite foire s’est installée : jeux, étals, bouffe.");
+  addChoice("Jeu d’adresse (1 or) → gain 3-6 si réussite", ()=>{
+    if(state.gold<1){ write("Pas assez d’or.","warn"); return continueBtn(eventFair); }
+    changeGold(-1);
+    const {total}=d20(state.attrs.AGI>=3?2:0);
+    if(total>=14){ const g=rng.between(3,6); changeGold(g); write(`Tu gagnes ${g} or !`,"good"); }
+    else write("Perdu…","warn");
+    continueBtn(eventFair);
+  }, true);
+  addChoice("Acheter baume (3 or)", ()=>{
+    if(state.gold>=3){ changeGold(-3); // consommer à l’usage
+      addItem(shopItems.balm.name, shopItems.balm.desc, {heal:1});
+    }else write("Pas assez d’or.","warn");
+    continueBtn(eventFair);
+  });
+  addChoice("Manger un ragoût (2 or, +4 PV)", ()=>{
+    if(state.gold>=2){ changeGold(-2); heal(4); }
+    else write("Pas assez d’or.","warn");
+    continueBtn(eventFair);
+  });
+  addChoice("Quitter la foire", continueBtn);
+}
+
+/* ---------- Mini-boss de zone (aléatoire rare) ---------- */
+function maybeMiniBoss(){
+  // 6% de chance après une exploration non-combat
+  if(rng.rand()<0.06){
+    write("…Tu sens une présence dangereuse proche.","warn");
+    combat(mobEx('mireHag'));
+    return true;
+  }
+  return false;
+}
+
+/* ---------- Patch : Marché du village étendu ---------- */
+const _market_orig = typeof market==='function'? market : null;
+function market(){
+  clearChoices();
+  write('🛒 Marché élargi : potions, équipements, utilitaires.');
+  addChoice('Potion (4 or)', ()=>{
+    if(state.gold>=4){ changeGold(-4); state.potions++; write('Potion ajoutée.','good'); }
+    else write('Pas assez d’or.','warn');
+    continueBtn(market);
+  }, true);
+  addChoice('Torche (5 or)', ()=>{
+    if(state.flags.torch){ write('Tu as déjà une torche.','info'); }
+    else if(state.gold>=5){ changeGold(-5); state.flags.torch=true; write('Torche achetée.','good'); }
+    else write('Pas assez d’or.','warn');
+    continueBtn(market);
+  });
+  addChoice('Bouclier de chêne (6 or, +1 DEF)', ()=>{
+    if(state.gold>=6){ changeGold(-6); addItem(shopItems.oakShield.name, shopItems.oakShield.desc, shopItems.oakShield.mods); }
+    else write('Pas assez d’or.','warn');
+    continueBtn(market);
+  });
+  addChoice('Épée longue (9 or, +2 ATQ)', ()=>{
+    if(state.gold>=9){ changeGold(-9); addItem(shopItems.longsword.name, shopItems.longsword.desc, shopItems.longsword.mods); }
+    else write('Pas assez d’or.','warn');
+    continueBtn(market);
+  });
+  addChoice('Cotte de mailles (10 or, +3 DEF)', ()=>{
+    if(state.gold>=10){ changeGold(-10); addItem(shopItems.chainMail.name, shopItems.chainMail.desc, shopItems.chainMail.mods); }
+    else write('Pas assez d’or.','warn');
+    continueBtn(market);
+  });
+  addChoice('Vendre un objet', ()=>{
+    if(!state.inventory.length){ write('Rien à vendre.','info'); return continueBtn(market); }
+    clearChoices(); write('Que veux-tu vendre ?');
+    state.inventory.forEach((it,idx)=>{
+      const val=priceOf(it);
+      addChoice(`${it.name} (+${val} or)`, ()=>{
+        state.inventory.splice(idx,1); changeGold(val); setStats(); write('Vendu.','good'); continueBtn(market);
+      });
+    });
+    addChoice('Retour', market);
+  });
+  addChoice('Aller au marché noir', eventBlackMarket);
+  addChoice('Retour village', eventVillage);
+}
+
+/* ---------- Patch : Guilde étendue (contrats variés) ---------- */
+const _guild_orig = typeof guildBoard==='function'? guildBoard : null;
+function guildBoard(){
+  clearChoices();
+  write('📜 Guilde — nouveaux contrats :');
+  addChoice('Chasser 1 ours (12 or)', ()=>{
+    state.quests.board.push({type:'bear', need:1, got:0, reward:12});
+    write('Contrat pris.','info'); continueBtn(eventVillage);
+  }, true);
+  addChoice('Chasser 2 squelettes (14 or)', ()=>{
+    state.quests.board.push({type:'skeleton', need:2, got:0, reward:14});
+    write('Contrat pris.','info'); continueBtn(eventVillage);
+  });
+  addChoice('Chasser 3 bandits (17 or)', ()=>{
+    state.quests.board.push({type:'bandit', need:3, got:0, reward:17});
+    write('Contrat pris.','info'); continueBtn(eventVillage);
+  });
+  addChoice('Retour village', eventVillage);
+}
+
+/* ---------- Patch : Village étendu (accès PNJ + foire) ---------- */
+const _village_orig = typeof eventVillage==='function'? eventVillage : null;
+function eventVillage(){
+  clearChoices();
+  write('🏘️ Village de Mirval (étendu).');
+  addChoice('Marché', market, true);
+  addChoice('Guilde (contrats)', guildBoard);
+  addChoice('Prêtre (bénédiction)', eventPriest);
+  addChoice('Érudit (fragments)', eventScholar);
+  addChoice('Chasseur (leçons & dague)', eventHunter);
+  addChoice('Foire', eventFair);
+  addChoice('Herboriste', eventHerbalist);
+  addChoice('Forgeron', eventSmith);
+  addChoice('Quitter le village', ()=>explore(true));
+}
+
+/* ---------- Patch : Rencontres aléatoires plus denses ---------- */
+const _randomEncounter_orig = typeof randomEncounter==='function'? randomEncounter : null;
+function randomEncounter(){
+  // 55% combat / 45% social (avec plus de variété)
+  if(rng.rand()<0.55){
+    // combats variés selon zone
+    const z=state.locationKey;
+    if(z==='marais'){
+      return combat( rng.rand()<0.5 ? mobTemplates.ghoul() : mobEx('mireHag') );
+    } else if(z==='ruines'){
+      return combat( rng.rand()<0.5 ? mobEx('skeleton') : mobEx('cultist') );
+    } else if(z==='colline'){
+      return combat( rng.rand()<0.5 ? mobTemplates.harpy() : mobEx('bear') );
+    } else if(z==='grotte'){
+      return combat( rng.rand()<0.5 ? mobTemplates.ancientGhoul() : mobEx('skeleton') );
+    } else {
+      // clairière & défaut
+      const pool=[mobTemplates.bandit(), mobTemplates.boar(), mobEx('sprite'), mobEx('bear')];
+      return combat( pool[rng.between(0,pool.length-1)] );
+    }
+  } else {
+    // PNJ/événements
+    const socials=[eventSanctuary, eventHermit, eventBard, eventPriest, eventHunter, eventScholar, eventStoneCircle, eventBridgeToll];
+    socials[rng.between(0,socials.length-1)]();
+  }
+}
+
+/* ---------- Patch : AfterCombat — prise en compte des nouveaux contrats ---------- */
+const _afterCombat_orig = typeof afterCombat==='function'? afterCombat : null;
+const __afterCombat_ref = afterCombat;
+afterCombat = function(){
+  // d’abord marquer les contrats étendus
+  if(state.quests.board?.length){
+    const en = (state.enemy?.name||'').toLowerCase();
+    state.quests.board.forEach(c=>{
+      if((c.type==='bandit'   && en.includes('bandit')) ||
+         (c.type==='wolf'     && en.includes('loup'))   ||
+         (c.type==='bear'     && en.includes('ours'))   ||
+         (c.type==='skeleton' && en.includes('squelette'))){
+        c.got=(c.got||0)+1;
+        if(c.got>=c.need){ changeGold(c.reward); c.done=true; write(`Contrat accompli ! +${c.reward} or`,'good'); }
+      }
+    });
+    state.quests.board = state.quests.board.filter(c=>!c.done);
+  }
+
+  // puis exécuter la version de base
+  __afterCombat_ref();
+};
+
+/* ---------- Patch léger : fouille améliore drop des fragments dans les ruines ---------- */
+const _eventRuins_orig = typeof eventRuins==='function'? eventRuins : null;
+function eventRuins(){
+  clearChoices();
+  write('🏚️ Ruines profondes (étendues).');
+  addChoice('Fouiller avec prudence (ESPRIT)', ()=>{
+    const {total}=d20(state.attrs.WIS>=3?2:0);
+    if(total>=16){
+      // priorité fragment si <3, sinon coffre
+      if(state.flags.fragments<3 && rng.rand()<0.65){
+        state.flags.fragments++; write('✨ Tu trouves un fragment d’artefact !','good');
+        if(state.flags.fragments>=3){ state.flags.witchUnlocked=true; state.quests.witch.state='Prête : affronter la Sorcière'; write('🌫️ Les brumes frémissent…','info'); }
+      } else { chest(); }
+    } else if(total>=10){ chest(); }
+    else { damage(rng.between(2,5),'Effondrement'); }
+    continueBtn();
+  }, true);
+  addChoice('Explorer la crypte (risque)', ()=>{
+    if(rng.rand()<0.6) combat( rng.rand()<0.5 ? mobEx('skeleton') : mobEx('cultist') );
+    else { write('Couloir vide… mais tu restes sur tes gardes.','info'); maybeMiniBoss(); continueBtn(); }
+  });
+  addChoice('Partir', continueBtn);
+}
+
+/* ---------- Patch : explore — injecte plus d’options sociales quand il y en a peu ---------- */
+const _explore_core = explore;
+explore = function(initial=false){
+  _explore_core(initial);
+  // Si peu d’options sociales visibles, ajouter un bouton de secours pour PNJ
+  try{
+    const labels=[...document.querySelectorAll('#choices button')].map(b=>b.textContent);
+    const hasSocial = labels.some(t=>/Herboriste|Forgeron|Barde|Ermite|Village|Prêtre|Érudit|Foire|Chasseur/i.test(t));
+    if(!hasSocial){
+      addChoice('Rencontrer quelqu’un', ()=>{
+        // Choisir un PNJ aléatoire sûr
+        [eventHerbalist, eventSmith, eventBard, eventPriest, eventScholar, eventHunter][rng.between(0,5)]();
+      });
+    }
+  }catch(_){}
+};
