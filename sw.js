@@ -1,3 +1,3 @@
-self.addEventListener('install', (e)=> self.skipWaiting());
-self.addEventListener('activate', (e)=> e.waitUntil(clients.claim()));
-self.addEventListener('fetch', ()=>{}); // no cache
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+}
