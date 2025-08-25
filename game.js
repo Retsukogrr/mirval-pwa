@@ -922,3 +922,90 @@ let wakeLock; async function keepAwake(){ try{ wakeLock = await navigator.wakeLo
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && 'wakeLock' in navigator) keepAwake(); });
 if('wakeLock' in navigator) keepAwake();
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js').catch(()=>{})); }
+// ===== HOTFIX v10-classes-start (à coller tout en bas de game.js) =====
+(function(){
+  // 1) Anti-cache SW : désenregistre d'anciens service workers (optionnel mais utile sur Pages)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+  }
+
+  // 2) Sécurise la liaison UI avant toute action
+  function safeBind(){
+    if (!window.ui || !ui.log) {
+      if (typeof bindUI === 'function') bindUI();
+    }
+    // Sanity: vérifie que les éléments critiques existent
+    const needed = ['log','choices','p-class','a-str','a-agi','a-wis','hp','hpmax','hpbar','gold','lvl','xp','status','inventory','quests','location','day','lastRoll','p-name','rep','rep-label'];
+    for (const id of needed){
+      if (!document.getElementById(id)){
+        console.warn('[v10 hotfix] Élément manquant dans le HTML : #'+id);
+      }
+    }
+  }
+
+  // 3) Force un état propre puis menu de classes
+  function hardResetAndShowClasses(){
+    if (typeof initialState === 'function') {
+      window.state = initialState();
+    } else {
+      // fallback minimal si jamais initialState n'existe pas (ne devrait pas arriver)
+      window.state = {
+        name:"Eldarion", cls:"—", hasChosenClass:false,
+        attrs:{STR:1,AGI:1,WIS:1}, hp:20, hpMax:20, gold:10, level:1, xp:0, rep:0,
+        day:1, time:"Aube", location:"Lisière de la forêt de Mirval", locationKey:"clairiere",
+        inventory:[], potions:0, status:[], flags:{}, quests:{main:{title:"Le Chef Bandit",state:"En cours"}, side:[], artifacts:{title:"Fragments d’artefact (0/3)",state:"En cours"}, board:[]},
+        skills:[], skill:{name:"", cooldown:0, cd:0, desc:"", use:()=>{}}, lastLabels:[]
+      };
+    }
+    // force l’absence de classe
+    state.hasChosenClass = false;
+    state.cls = '—';
+
+    // Met à jour l’UI et affiche le menu de classes
+    if (typeof setStats === 'function') setStats();
+    if (typeof write === 'function') write("🗡️ Choisis ta classe pour commencer l'aventure.","sys");
+    if (typeof chooseClass === 'function') chooseClass();
+  }
+
+  // 4) Remplace setup() par une version robuste
+  const _setup = (typeof setup === 'function') ? setup : null;
+  window.setup = function(isNew=false){
+    safeBind();
+
+    // Si pas de classe → on montre le menu, point.
+    if (isNew || !state || !state.hasChosenClass || !state.cls || state.cls === '—'){
+      hardResetAndShowClasses();
+      return;
+    }
+
+    // Sinon, on laisse la logique normale (ou un fallback vers explore)
+    if (_setup) {
+      try { _setup(isNew); return; } catch(e){ console.warn('[v10 hotfix] setup original a échoué', e); }
+    }
+    if (typeof setStats === 'function') setStats();
+    if (typeof explore === 'function') explore(true);
+  };
+
+  // 5) Watchdog : si pas de classe + pas de boutons, on réaffiche le menu automatiquement
+  setInterval(()=>{
+    try{
+      if (!state || state.hasChosenClass) return;
+      const zone = document.getElementById('choices');
+      if (zone && zone.childElementCount === 0 && typeof chooseClass === 'function'){
+        chooseClass();
+      }
+    }catch(_){}
+  }, 800);
+
+  // 6) Boot DOM-safe
+  function bootGo(){
+    safeBind();
+    // Démarre forcément avec le choix de classe
+    setup(true);
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', bootGo, {once:true});
+  } else {
+    bootGo();
+  }
+})();
