@@ -1,10 +1,13 @@
 /* ============================================================
-   Aventurier de Mirval — v10 (build classes-fix + combat stable)
+   Aventurier de Mirval — v10 (stable) 
+   - Correctifs: menu classes, alias ui.loc, “Continuer” unique,
+                 combat non bloquant, boot DOM-safe
+   - Gameplay: Marché, Guilde/contrats, fragments (drop%), torche, boss
    ============================================================ */
 
 /* ---------- RNG (graine) ---------- */
 const rng = (() => {
-  const seed = (crypto.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] ^ Date.now() : Date.now()) >>> 0;
+  const seed = (crypto.getRandomValues ? (crypto.getRandomValues(new Uint32Array(1))[0] ^ Date.now()) : Date.now()) >>> 0;
   let s = seed >>> 0;
   function rand(){ s ^= s<<13; s>>>=0; s ^= s>>17; s>>>=0; s ^= s<<5; s>>>=0; return (s>>>0)/0xFFFFFFFF; }
   function between(min,max){ return Math.floor(rand()*(max-min+1))+min; }
@@ -14,9 +17,15 @@ const rng = (() => {
 /* ---------- Bind UI (sécurisé) ---------- */
 const ui = {};
 function bindUI(){
-  const ids = ['log','choices','hp','hpmax','hpbar','gold','lvl','xp','inventory','location','day','lastRoll','status','p-class','p-name','a-str','a-agi','a-wis','rep','rep-label','quests','seedInfo'];
+  const ids = [
+    'log','choices','hp','hpmax','hpbar','gold','lvl','xp','inventory','location',
+    'day','lastRoll','status','p-class','p-name','a-str','a-agi','a-wis',
+    'rep','rep-label','quests','seedInfo'
+  ];
   ids.forEach(id => ui[id] = document.getElementById(id));
   if (ui.seedInfo) ui.seedInfo.textContent = `seed ${rng.seed}`;
+  // ✅ Alias legacy pour compat compat: certains blocs utilisent ui.loc
+  ui.loc = ui.location;
 }
 
 /* ---------- Helpers d'affichage ---------- */
@@ -25,7 +34,12 @@ function write(html, cls=""){ const p=document.createElement('p'); if(cls) p.cla
 function clearChoices(){ ui.choices.innerHTML=''; }
 function addChoice(label, cb, primary=false){
   const b=document.createElement('button'); if(primary) b.classList.add('btn-primary'); b.textContent=label;
-  b.addEventListener('click', () => { if (state._lockClicks) return; state._lockClicks = true; try{ cb(); } finally { setTimeout(()=>{ state._lockClicks=false; }, 60); } });
+  // petit lock anti-double-clic
+  b.addEventListener('click', () => {
+    if (state._lockClicks) return;
+    state._lockClicks = true;
+    try{ cb(); } finally { setTimeout(()=>{ state._lockClicks=false; }, 60); }
+  });
   ui.choices.appendChild(b);
 }
 
@@ -36,7 +50,7 @@ function initialState(){
     cls: "—",
     hasChosenClass: false,
 
-    // Attributs (renommés pour clarté)
+    // Attributs (clairs)
     attrs: { STR:1, AGI:1, WIS:1 },
 
     // Progression
@@ -60,7 +74,7 @@ function initialState(){
       metHerbalist:false, metSmith:false, peasantSaved:false,
       rumors:0, bossUnlocked:false,
       ruinsUnlocked:true, grottoUnlocked:false,
-      charm:false
+      charm:false, oracleSeen:false
     },
     quests: {
       main:{title:'Le Chef Bandit', state:'En cours'},
@@ -85,27 +99,21 @@ function playerAtkMod(){
   let m = 0;
   if(state.cls==='Guerrier') m+=2;
   if(state.attrs.STR>=3) m+=1;
-
-  // Équipement
   if (state.equips.weapon && state.equips.weapon.mods?.atk) m += state.equips.weapon.mods.atk;
-  if (state.inventory.some(i=>i.name==='Épée affûtée')) m+=1;
-
+  if (state.inventory.some(i=>i.name==='Épée affûtée')) m+=1; // rétro compat
   return m;
 }
 function playerDef(){
   let d = 10;
   if(state.cls==='Paladin') d+=1;
   if(state.attrs.AGI>=3) d+=1;
-
   const A = state.equips.armor;
   const O = state.equips.offhand;
   if (A && A.mods?.def) d += A.mods.def;
   if (O && O.mods?.def) d += O.mods.def;
-
   if(state.inventory.some(i=>i.name==='Petite armure')) d+=1;
   if(state.inventory.some(i=>i.name==='Cuir renforcé')) d+=2;
   if(state.inventory.some(i=>i.name==='Bouclier en fer')) d+=2;
-
   return d;
 }
 function terrainPenalty(){ return state.locationKey==='marais' ? -1 : 0; }
@@ -188,16 +196,13 @@ function svgIcon(kind){
 
 /* ---------- Navigation & choix non redondants ---------- */
 function pickWeighted(items, k){
-  // évite la redite : on exclut les derniers labels utilisés
   const recent = new Set(state.lastLabels);
   let pool = items.flatMap(it => Array((it.w||1)).fill(it)).filter(it=> !recent.has(it.label));
   if(pool.length<k) pool = items.flatMap(it => Array((it.w||1)).fill(it));
-
   const out=[];
   for(let i=0;i<k && pool.length;i++){
     const idx = Math.floor(rng.rand()*pool.length);
-    out.push(pool[idx]);
-    pool.splice(idx,1);
+    out.push(pool[idx]); pool.splice(idx,1);
   }
   state.lastLabels = [...out.map(o=>o.label), ...state.lastLabels].slice(0,8);
   return out;
@@ -211,7 +216,6 @@ function continueBtn(next=()=>explore()){
 
 /* ---- Base actions ---- */
 function searchArea(){
-  // Résolution unique : on n’ajoute qu’UN “Continuer”
   clearChoices();
   const bonus = state.attrs.WIS>=3?1:0;
   const {total} = d20(bonus);
@@ -257,7 +261,6 @@ function randomEncounter(){
     else if(zone==='clairiere') combat(mobTemplates.bandit());
     else combat(mobTemplates.wolf());
   }else{
-    // petit évènement calme
     [eventSanctuary,eventHerbalist,eventSmith,eventHermit,eventBard][rng.between(0,4)]();
   }
 }
@@ -277,13 +280,13 @@ function gotoZone(key){
 
 function setTimeAndMaybeTick(){
   setTime();
-  // (ici on pourrait appliquer des effets d’états récurrents si on en ajoute)
+  // (place pour états récurrents si besoin)
 }
 
 /* ---- Exploration ---- */
 function explore(initial=false){
   setStats();
-  ui.loc.textContent = state.location;
+  ui.location.textContent = state.location; // ✅ alias géré
   ui.day.textContent = `Jour ${state.day} — ${state.time}`;
   clearChoices();
   if(!initial) setTimeAndMaybeTick();
@@ -383,7 +386,6 @@ function eventSmith(){
     continueBtn();
   });
   addChoice('Réparer/équiper', ()=>{
-    // Équipe automatiquement les meilleurs objets (simple)
     autoEquip();
     write('Tes équipements sont prêts.','good');
     continueBtn();
@@ -535,7 +537,6 @@ function guildBoard(){
 
 /* ---- Auto-équipement simple ---- */
 function autoEquip(){
-  // Arme: prend celle avec le plus d’atk
   const bestW = state.inventory.filter(i=>i.mods?.atk).sort((a,b)=>(b.mods.atk||0)-(a.mods.atk||0))[0]||null;
   const bestA = state.inventory.filter(i=>i.mods?.def).sort((a,b)=>(b.mods.def||0)-(a.mods.def||0))[0]||null;
   state.equips.weapon = bestW;
@@ -755,10 +756,9 @@ function startAdventure(){
 
 /* ===================== SETUP / BOOT ROBUSTE ===================== */
 
-// Version originale (laisser simple)
 function setup(isNew=false){
   setStats();
-  ui.location.textContent = state.location;
+  ui.location.textContent = state.location; // ✅ alias ok
   ui.day.textContent = `Jour ${state.day} — ${state.time}`;
 
   if(isNew || !state.hasChosenClass || state.cls==='—'){
@@ -769,7 +769,7 @@ function setup(isNew=false){
   explore(true);
 }
 
-// WATCHDOG anti-page vide (si pas de classe & pas de boutons)
+// Watchdog anti-page vide (si pas de classe & pas de boutons)
 setInterval(()=>{
   try{
     if(!state || state.hasChosenClass) return;
