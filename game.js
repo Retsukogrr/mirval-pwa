@@ -1,5 +1,5 @@
 // === Aventurier de Mirval — game.js v10 (corrigé & enrichi) ===
-console.log("game.js v10 — build complète corrigée");
+console.log("game.js v10 — build démarrage-classes & combats fix");
 
 // ====================
 // État initial
@@ -157,7 +157,7 @@ function terrainPenalty(){ return state.locationKey==='marais' ? -1 : 0; }
 // ====================
 function chooseClass(){
   clearChoices();
-  write("Choisis ta classe :","info");
+  write("🗡️ Choisis ta classe :","info");
 
   function pick(nom, key, val, skill){
     state.cls=nom; if(key) state.attrs[key]=val;
@@ -204,8 +204,7 @@ const mobs = {
   serpent:()=>({ name:"Serpent des marais", hp:11, maxHp:11, ac:11, hitMod:3, tier:1, dotChance:0.25, dotType:'poison'}),
   slime:  ()=>({ name:"Slime acide",        hp:14, maxHp:14, ac:12, hitMod:3, tier:2, dotChance:0.2,  dotType:'bleed'}),
   archer: ()=>({ name:"Brigand archer",     hp:12, maxHp:12, ac:12, hitMod:4, tier:2 })
-};
-// ====================
+};// ====================
 // Fin de combat atomique & helpers (anti-blocage)
 // ====================
 let combatFinalizing = false;
@@ -263,7 +262,7 @@ function endIfDead(){
 }
 
 // ====================
-// Combat (corrigé pour mort ennemie & flux d’actions)
+// Combat
 // ====================
 function combat(mon){
   clearChoices();
@@ -842,7 +841,7 @@ function eventOracle(){
 }
 
 // ====================
-// Setup / Boot
+// Setup / Boot (forçage menu classes)
 // ====================
 function ensureStateIntegrity(){
   state.mats = state.mats || {herbe:0, cuir:0, dent:0, obsid:0};
@@ -862,10 +861,9 @@ function setup(isNew=false){
   ui.loc.textContent=state.location; ui.day.textContent=`Jour ${state.day} — ${state.time}`;
   clearChoices();
 
-  const classes=["Guerrier","Voleur","Paladin","Rôdeur","Mystique"];
-  const needsClass=!state.hasChosenClass || !classes.includes(state.cls);
-  if(isNew || ui.log.childElementCount===0 || needsClass){
-    write("v10 — Démarrage. Choisis ta classe.","sys");
+  // Forçage ultra-simple du choix de classe au démarrage (ou si perdu)
+  if(isNew || !state.hasChosenClass || !state.cls || state.cls==="—"){
+    write("🗡️ Choisis ta classe pour commencer l'aventure.","sys");
     chooseClass();
     return;
   }
@@ -873,14 +871,17 @@ function setup(isNew=false){
 }
 
 function startAdventure(){
-  ui.log.innerHTML=""; write("L'aventure commence !","info"); setStats(); explore(true);
+  ui.log.innerHTML="";
+  write("L'aventure commence !","info");
+  setStats();
+  explore(true);
 }
 
 function gameOver(){
   state.inCombat=false;
   write("<b>☠️ Tu t'effondres… La forêt de Mirval se referme sur ton destin.</b>","bad");
   clearChoices();
-  addChoice("Recommencer", ()=>{ state=initialState(); ensureStateIntegrity(); setup(true); }, true);
+  addChoice("Recommencer", ()=>{ state=initialState(); ensureStateIntegrity(); state.hasChosenClass=false; state.cls='—'; setup(true); }, true);
 }
 
 // Cooldowns: -1 à chaque exploration
@@ -893,13 +894,27 @@ function gameOver(){
   };
 })();
 
-// Watchdog (sécurité UI)
+// Watchdog (sécurité UI) : si pas de classe et pas de boutons → réafficher choix classe
 setInterval(()=>{ try{ if(!state.hasChosenClass && ui.choices.childElementCount===0){ chooseClass(); } }catch(_){ } }, 800);
 
-// Boot DOM-safe
+// Boot DOM-safe (classe forcée)
 (function boot(){
-  function go(){ bindUI(); state=initialState(); ensureStateIntegrity(); state.hasChosenClass=false; setup(true); }
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', go, {once:true}); } else { go(); }
+  function go(){
+    bindUI();
+    state = initialState();
+    ensureStateIntegrity();
+
+    // Forces pour éviter tout oubli
+    state.hasChosenClass=false;
+    state.cls='—';
+
+    setup(true);
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', go, {once:true});
+  } else {
+    go();
+  }
 })();
 
 // Optionnel: WakeLock & SW
