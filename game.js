@@ -1,5 +1,5 @@
 // === Aventurier de Mirval — game.js v10 (corrigé & enrichi) ===
-console.log("game.js v10 — build corrigée");
+console.log("game.js v10 — build complète corrigée");
 
 // ====================
 // État initial
@@ -26,7 +26,7 @@ function initialState(){
       fragments:0, bossUnlocked:false, torch:false, oracleSeen:false,
       peasantSaved:false, rumors:0, ruinsUnlocked:true,
       villageUnlocked:false, witchUnlocked:false, map:false, ruinsClue:false,
-      nextHitBonus:0
+      nextHitBonus:0, charm:0
     },
     quests:{
       main:{title:"Le Chef Bandit",state:"En cours"},
@@ -86,21 +86,8 @@ function continueBtn(next){ addChoice("Continuer", ()=>{ if(typeof next==='funct
 // RNG / dés / utilitaires
 // ====================
 const rng = { rand:()=>Math.random(), between:(a,b)=>Math.floor(Math.random()*(b-a+1))+a };
-function d20(mod=0){ const r=rng.between(1,20); const t=r+mod; ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${r} = ${t}`; return {roll:r,total:t}; }
+function d20(mod=0){ const r=rng.between(1,20); const t=r+mod; if(ui.lastRoll) ui.lastRoll.textContent=`d20(${mod>=0?'+':''}${mod}) → ${r} = ${t}`; return {roll:r,total:t}; }
 
-function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,"good"); }
-function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,"bad"); if(state.hp<=0) gameOver(); }
-function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n} (total: ${state.gold})`, n>=0?"good":"warn"); }
-function gainXP(n){ state.xp+=n; write(`XP +${n}`,"info"); const need=20+(state.level-1)*15; if(state.xp>=need){ state.level++; state.xp=0; state.hpMax+=5; state.hp=state.hpMax; write(`<b>Niveau ${state.level} !</b>`,"good"); } setStats(); }
-function addItem(name,desc){ state.inventory.push({name,desc}); setStats(); write(`Tu obtiens <b>${name}</b>.`,"good"); }
-function hasItem(name){ return state.inventory.some(i=>i.name===name); }
-function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
-function repText(n){ return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'; }
-function rep(n){ state.rep+=n; setStats(); }
-
-// ====================
-// Stats UI
-// ====================
 function setStats(){
   ui.hp.textContent=state.hp; ui.hpmax.textContent=state.hpMax;
   ui.hpbar.style.width=Math.max(0,Math.min(100,Math.round(state.hp/state.hpMax*100)))+'%';
@@ -117,13 +104,22 @@ function setStats(){
     : `<b>Matériaux</b><span>—</span>`;
   const m=document.createElement('div'); m.className='stat'; m.innerHTML=matsLine; ui.inv.appendChild(m);
 
-  // Quêtes
   ui.quests.innerHTML='';
   const mq=document.createElement('div'); mq.className='stat'; mq.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state}</span>`; ui.quests.appendChild(mq);
   const aq=document.createElement('div'); aq.className='stat'; aq.innerHTML=`<b>${state.quests.artifacts.title.replace(/\\d\\/3/,state.flags.fragments+'/3')}</b><span>${state.quests.artifacts.state}</span>`; ui.quests.appendChild(aq);
   state.quests.side.forEach(q=>{ const x=document.createElement('div'); x.className='stat'; x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`; ui.quests.appendChild(x); });
   if(state.quests.board.length){ const y=document.createElement('div'); y.className='stat'; y.innerHTML=`<b>Contrats</b><span>${state.quests.board.length} actif(s)</span>`; ui.quests.appendChild(y); }
 }
+
+function heal(n){ state.hp=Math.min(state.hpMax,state.hp+n); setStats(); write(`+${n} PV`,"good"); }
+function damage(n,src=""){ state.hp=Math.max(0,state.hp-n); setStats(); write(`-${n} PV ${src?`(${src})`:''}`,"bad"); if(state.hp<=0) gameOver(); }
+function changeGold(n){ state.gold=Math.max(0,state.gold+n); setStats(); write(`Or ${n>=0?'+':''}${n} (total: ${state.gold})`, n>=0?"good":"warn"); }
+function gainXP(n){ state.xp+=n; write(`XP +${n}`,"info"); const need=20+(state.level-1)*15; if(state.xp>=need){ state.level++; state.xp=0; state.hpMax+=5; state.hp=state.hpMax; write(`<b>Niveau ${state.level} !</b>`,"good"); } setStats(); }
+function addItem(name,desc){ state.inventory.push({name,desc}); setStats(); write(`Tu obtiens <b>${name}</b>.`,"good"); }
+function hasItem(name){ return state.inventory.some(i=>i.name===name); }
+function removeItem(name){ const i=state.inventory.findIndex(x=>x.name===name); if(i>=0) state.inventory.splice(i,1); setStats(); }
+function repText(n){ return n>=30?'Vertueux':n<=-30?'Sombre':'Neutre'; }
+function rep(n){ state.rep+=n; setStats(); }
 
 // ====================
 // Statuts & mods combat
@@ -210,6 +206,63 @@ const mobs = {
   archer: ()=>({ name:"Brigand archer",     hp:12, maxHp:12, ac:12, hitMod:4, tier:2 })
 };
 // ====================
+// Fin de combat atomique & helpers (anti-blocage)
+// ====================
+let combatFinalizing = false;
+
+function finishCombat(snapshot){
+  if (combatFinalizing) return;
+  combatFinalizing = true;
+
+  state.inCombat = false;
+  const foe = snapshot || (state.enemy ? {...state.enemy} : null);
+  state.enemy = null;
+
+  if (foe) {
+    const tier = foe.tier || 1;
+    const gold = rng.between(tier, tier*3);
+    const xp   = rng.between(tier*3, tier*6);
+    changeGold(gold);
+    gainXP(xp);
+
+    const r = rng.rand();
+    if(r<0.18 && !hasItem("Épée affûtée")) addItem("Épée affûtée","+1 attaque");
+    else if(r<0.30 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois","+1 armure légère");
+    else if(r<0.40) { state.potions++; write("Tu trouves une potion.","good"); }
+    else if(r<0.48 && !hasItem("Arc de chasse")) addItem("Arc de chasse","+1 attaque à distance");
+    else if(r<0.52 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple");
+
+    if(/Sanglier|Loup|Harpie/i.test(foe.name)){ if(rng.rand()<0.4){ state.mats.cuir++; write("Tu récupères du cuir.","good"); } }
+    if(/Sanglier|Loup/i.test(foe.name) && rng.rand()<0.25){ state.mats.dent++; write("Tu récupères une dent.","good"); }
+
+    if(foe.name && foe.name.includes("Bandit")){
+      state.flags.rumors = (state.flags.rumors||0)+1;
+      if(state.flags.rumors>=3 && !state.flags.bossUnlocked){
+        state.flags.bossUnlocked=true;
+        write("🗡️ Tu apprends la cache du Chef Bandit… (événement rare débloqué)","info");
+      }
+    }
+
+    if (typeof updateContractsAfterKill === 'function') updateContractsAfterKill(foe.name||'');
+  }
+
+  clearChoices();
+  write("⚑ Le calme revient…","sys");
+  setTimeout(()=>{ combatFinalizing=false; explore(); }, 0);
+}
+
+function endIfDead(){
+  if (!state.inCombat || !state.enemy) return false;
+  if (state.enemy.hp <= 0){
+    write(`<b>${state.enemy.name} est vaincu !</b>`,"good");
+    finishCombat({...state.enemy});
+    return true;
+  }
+  if (state.hp <= 0){ gameOver(); return true; }
+  return false;
+}
+
+// ====================
 // Combat (corrigé pour mort ennemie & flux d’actions)
 // ====================
 function combat(mon){
@@ -219,18 +272,6 @@ function combat(mon){
   state.lastEnemyName=mon.name;
   write(`<b>${mon.name}</b> apparaît ! ❤️ ${mon.hp} — CA ${mon.ac}`,"warn");
   combatTurn();
-}
-
-function endIfDead(){
-  // Centralise la victoire pour éviter tout oubli
-  if(!state.inCombat || !state.enemy) return false;
-  if(state.enemy.hp<=0){
-    write(`<b>${state.enemy.name} est vaincu !</b>`,"good");
-    afterCombat();
-    return true;
-  }
-  if(state.hp<=0){ gameOver(); return true; }
-  return false;
 }
 
 function combatTurn(){
@@ -248,7 +289,7 @@ function combatTurn(){
       const dmg=Math.max(0,rng.between(1,3+(e.tier||2))-2-bonus);
       write(`Parade partielle, -${dmg} PV.`,'warn'); damage(dmg,e.name);
     } else write("Tu pares complètement !",'good');
-    if(!endIfDead()){ enemyAttack(); if(!endIfDead()) combatTurn(); }
+    if (!endIfDead()) { enemyAttack(); if (!endIfDead()) combatTurn(); }
   });
 
   addChoice('✨ Compétence', ()=>{
@@ -261,9 +302,11 @@ function combatTurn(){
     list.forEach((sk,i)=>{
       addChoice(`${sk.name}${sk.cd>0?` (CD ${sk.cd})`:''}`, ()=>{
         if(sk.cd>0){ write("Compétence en recharge.","warn"); return combatTurn(); }
-        sk.use(e);
+        const before = state.enemy.hp;
+        sk.use(state.enemy);
+        if (state.enemy.hp !== before && endIfDead()) return;
         sk.cd = sk.cooldown||3;
-        if(!endIfDead()){ enemyAttack(); if(!endIfDead()) combatTurn(); }
+        if (!endIfDead()) { enemyAttack(); if (!endIfDead()) combatTurn(); }
       }, i===0);
     });
     addChoice("↩️ Retour", combatTurn);
@@ -272,13 +315,13 @@ function combatTurn(){
   addChoice(`🧪 Potion (${state.potions})`, ()=>{
     if(state.potions<=0){ write("Plus de potions.","warn"); return combatTurn(); }
     state.potions--; heal(rng.between(8,12));
-    if(!endIfDead()){ enemyAttack(); if(!endIfDead()) combatTurn(); }
+    if (!endIfDead()) { enemyAttack(); if (!endIfDead()) combatTurn(); }
   });
 
   addChoice('🏃 Fuir', ()=>{
     const r=d20(state.attrs.AGI>=3?2:0).total;
     if(r>=14){ write("Tu fuis le combat.","sys"); state.inCombat=false; state.enemy=null; explore(); }
-    else { write("Échec de fuite !","bad"); enemyAttack(); if(!endIfDead()) combatTurn(); }
+    else { write("Échec de fuite !","bad"); enemyAttack(); if (!endIfDead()) combatTurn(); }
   });
 }
 
@@ -287,23 +330,23 @@ function aimMenu(){
 
   addChoice('🎯 Tête', ()=>{
     const r=d20(playerAtkMod()-2 + terrainPenalty() + bonusNext).total;
-    if(r>=e.ac+2){ const dmg=rng.between(6,10); e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); }
+    if(r>=e.ac+2){ const dmg=rng.between(6,10); e.hp-=dmg; write(`🎯 Coup à la tête : -${dmg} PV`,'good'); if (endIfDead()) return; }
     else write('Tu manques la tête.','warn');
-    if(!endIfDead()){ enemyAttack(); if(!endIfDead()) combatTurn(); }
+    if (!endIfDead()) { enemyAttack(); if (!endIfDead()) combatTurn(); }
   }, true);
 
   addChoice('🗡️ Torse', ()=>{
     const r=d20(playerAtkMod() + terrainPenalty() + bonusNext).total;
-    if(r>=e.ac){ const dmg=rng.between(3,7); e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); }
+    if(r>=e.ac){ const dmg=rng.between(3,7); e.hp-=dmg; write(`🗡️ Frappe au torse : -${dmg} PV`,'good'); if (endIfDead()) return; }
     else write('Tu manques.','warn');
-    if(!endIfDead()){ enemyAttack(); if(!endIfDead()) combatTurn(); }
+    if (!endIfDead()) { enemyAttack(); if (!endIfDead()) combatTurn(); }
   });
 
   addChoice('🦵 Jambes', ()=>{
     const r=d20(playerAtkMod()+1 + terrainPenalty() + bonusNext).total;
-    if(r>=e.ac-1){ const dmg=rng.between(2,5); e.hp-=dmg; e.slowTurns=(e.slowTurns||0)+2; write(`🦵 Frappe aux jambes : -${dmg} PV (ennemi ralenti)`,'good'); }
+    if(r>=e.ac-1){ const dmg=rng.between(2,5); e.hp-=dmg; e.slowTurns=(e.slowTurns||0)+2; write(`🦵 Frappe aux jambes : -${dmg} PV (ennemi ralenti)`,'good'); if (endIfDead()) return; }
     else write('Tu manques les jambes.','warn');
-    if(!endIfDead()){ enemyAttack(); if(!endIfDead()) combatTurn(); }
+    if (!endIfDead()) { enemyAttack(); if (!endIfDead()) combatTurn(); }
   });
 
   addChoice('↩️ Retour', combatTurn);
@@ -328,44 +371,11 @@ function enemyAttack(){
     write(`${e.name} rate son attaque.`,"info");
   }
   tickStatus();
+  if (endIfDead()) return;
 }
 
-function afterCombat(){
-  const e=state.enemy; // snapshot
-  state.inCombat=false; 
-  state.enemy=null;
-  const tier = e?.tier||1;
-  const gold=rng.between(tier, tier*3);
-  const xp=rng.between(tier*3, tier*6);
-  changeGold(gold); gainXP(xp);
-
-  // Loots
-  const r=rng.rand();
-  if(r<0.18 && !hasItem("Épée affûtée")) addItem("Épée affûtée","+1 attaque");
-  else if(r<0.30 && !hasItem("Bouclier en bois")) addItem("Bouclier en bois","+1 armure légère");
-  else if(r<0.40) { state.potions++; write("Tu trouves une potion.","good"); }
-  else if(r<0.48 && !hasItem("Arc de chasse")) addItem("Arc de chasse","+1 attaque à distance");
-  else if(r<0.52 && !hasItem("Cuir renforcé")) addItem("Cuir renforcé","+2 armure souple");
-
-  // Matériaux
-  if(/Sanglier|Loup|Harpie/i.test(e.name)){ if(rng.rand()<0.4){ state.mats.cuir++; write("Tu récupères du cuir.","good"); } }
-  if(/Sanglier|Loup/i.test(e.name) && rng.rand()<0.25){ state.mats.dent++; write("Tu récupères une dent.","good"); }
-
-  // Rumeurs → Chef Bandit
-  if(e.name.includes("Bandit")){
-    state.flags.rumors = (state.flags.rumors||0)+1;
-    if(state.flags.rumors>=3 && !state.flags.bossUnlocked){
-      state.flags.bossUnlocked=true;
-      write("🗡️ Tu apprends la cache du Chef Bandit… (événement rare débloqué)","info");
-    }
-  }
-
-  // Contrats
-  updateContractsAfterKill(e.name);
-
-  // Reprise
-  explore();
-}
+// afterCombat compat (tout est géré par finishCombat)
+function afterCombat(){ write("✔️ Combat terminé.","info"); }
 
 // ====================
 // PNJ & événements
@@ -816,6 +826,19 @@ function useItemMenu(){
   }
 
   addChoice("Annuler", explore);
+}
+
+// ====================
+// Événements additionnels
+// ====================
+function eventOracle(){
+  write('🔮 Une voyante apparaît dans tes rêves.','info');
+  clearChoices();
+  addChoice('Écouter la prophétie', ()=>{
+    write('“Quand trois éclats seront réunis, la porte s’ouvrira.”','info');
+    state.flags.oracleSeen=true;
+    continueBtn(explore);
+  }, true);
 }
 
 // ====================
