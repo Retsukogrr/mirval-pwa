@@ -1180,3 +1180,137 @@ explore = function(initial=false){
     }
   }catch(_){}
 };
+/* ============================================================
+   Mirval v10 — VISUAL PACK (à coller à la fin de game.js)
+   - Cartes SVG de lieux, PNJ, monstres (auto-générées)
+   - Bannière de zone à l’arrivée
+   - Cartes "Combat engagé" et "Victoire"
+   - Ne modifie PAS le gameplay; patchs non-intrusifs
+   ============================================================ */
+
+/* ---------- 1) Helpers d’injection visuelle ---------- */
+function vp_card(html){
+  const wrap = document.createElement('div');
+  wrap.className = 'vp-card';
+  wrap.innerHTML = html;
+  ui.log.appendChild(wrap);
+  ui.log.scrollTop = ui.log.scrollHeight;
+}
+function vp_banner(title, subtitle, svg){
+  vp_card(`
+    <div class="vp-banner">
+      <div class="vp-svg">${svg||''}</div>
+      <div class="vp-banner-text">
+        <div class="vp-title">${title}</div>
+        ${subtitle?`<div class="vp-sub">${subtitle}</div>`:''}
+      </div>
+    </div>
+  `);
+}
+function vp_row(svg, title, lines=[]){
+  vp_card(`
+    <div class="vp-row">
+      <div class="vp-svg">${svg||''}</div>
+      <div class="vp-row-text">
+        <div class="vp-row-title">${title}</div>
+        ${lines.length?`<div class="vp-row-sub">${lines.join('<br>')}</div>`:''}
+      </div>
+    </div>
+  `);
+}
+
+/* ---------- 2) Générateurs SVG simples ---------- */
+function vp_sceneSVG(kind){
+  // Petits paysages stylisés cohérents par zone
+  const g = {
+    clairiere: `<svg viewBox="0 0 220 90" width="220" height="90"><rect width="220" height="90" fill="#0b1220"/><rect y="55" width="220" height="35" fill="#1b2a3d"/><circle cx="36" cy="30" r="16" fill="#60a5fa"/><rect x="140" y="40" width="8" height="24" fill="#374151"/><polygon points="144,18 130,40 158,40" fill="#4b5563"/></svg>`,
+    marais: `<svg viewBox="0 0 220 90" width="220" height="90"><rect width="220" height="90" fill="#071017"/><rect y="60" width="220" height="30" fill="#0f1c24"/><circle cx="186" cy="20" r="12" fill="#94a3b8"/><ellipse cx="70" cy="73" rx="40" ry="6" fill="#12303a"/><ellipse cx="120" cy="77" rx="50" ry="7" fill="#0f2831"/></svg>`,
+    colline: `<svg viewBox="0 0 220 90" width="220" height="90"><rect width="220" height="90" fill="#0e0f13"/><polygon points="0,80 60,40 120,80" fill="#233047"/><polygon points="80,80 150,35 220,80" fill="#293a56"/><circle cx="40" cy="20" r="10" fill="#f59e0b"/></svg>`,
+    ruines: `<svg viewBox="0 0 220 90" width="220" height="90"><rect width="220" height="90" fill="#0b0e15"/><rect x="30" y="40" width="30" height="30" fill="#374151"/><rect x="60" y="40" width="10" height="30" fill="#1f2937"/><rect x="150" y="35" width="18" height="35" fill="#334155"/><rect x="168" y="35" width="6" height="35" fill="#1f2937"/></svg>`,
+    grotte: `<svg viewBox="0 0 220 90" width="220" height="90"><rect width="220" height="90" fill="#0a0f18"/><circle cx="110" cy="45" r="40" fill="#0f1320"/><path d="M70 80 Q110 30 150 80 Z" fill="#1f2538"/></svg>`,
+    village: `<svg viewBox="0 0 220 90" width="220" height="90"><rect width="220" height="90" fill="#0b1220"/><rect x="30" y="50" width="40" height="25" fill="#6b7280"/><polygon points="30,50 50,35 70,50" fill="#9ca3af"/><rect x="120" y="48" width="50" height="27" fill="#4b5563"/><polygon points="120,48 145,30 170,48" fill="#94a3b8"/></svg>`
+  };
+  return g[kind] || g.clairiere;
+}
+function vp_pnjSVG(type){
+  const baseHead = `<circle cx="28" cy="18" r="10" fill="#cbd5e1"/><rect x="16" y="28" width="24" height="16" rx="4" fill="#94a3b8"/>`;
+  const aura = type==='herboriste' ? `<circle cx="28" cy="18" r="13" fill="rgba(52,211,153,.18)"/>` :
+               type==='forgeron'   ? `<circle cx="28" cy="18" r="13" fill="rgba(245,158,11,.18)"/>` :
+               type==='ermite'     ? `<circle cx="28" cy="18" r="13" fill="rgba(96,165,250,.18)"/>` :
+               type==='barde'      ? `<circle cx="28" cy="18" r="13" fill="rgba(236,72,153,.18)"/>` :
+               `<circle cx="28" cy="18" r="13" fill="rgba(148,163,184,.18)"/>`;
+  return `<svg viewBox="0 0 56 48" width="84" height="72"><rect width="56" height="48" rx="8" fill="#0f1422"/><rect width="56" height="48" rx="8" fill="none" stroke="#22304a"/><!-- aura -->${aura}<!-- corps -->${baseHead}</svg>`;
+}
+function vp_mobSVG(name){
+  const palette = name.includes('Bandit')?['#2f354a','#ffbf46']:
+                  name.includes('Goule') ?['#213139','#34d399']:
+                  name.includes('Harpie')?['#1b1f35','#60a5fa']:
+                  name.includes('Ours')  ?['#241b13','#f59e0b']:
+                  name.includes('Sorcière')?['#13151f','#a78bfa']: ['#0f1320','#94a3b8'];
+  return `<svg viewBox="0 0 120 72" width="160" height="96"><rect width="120" height="72" rx="10" fill="${palette[0]}"/><circle cx="36" cy="36" r="16" fill="${palette[1]}"/><rect x="62" y="28" width="38" height="16" rx="8" fill="#0b0e15"/></svg>`;
+}
+
+/* ---------- 3) Bannières automatiques de zone ---------- */
+const _gotoZone_vp = typeof gotoZone==='function' ? gotoZone : null;
+gotoZone = function(key){
+  _gotoZone_vp ? _gotoZone_vp(key) : null;
+  // Après changement de zone, afficher la bannière
+  const label = key==='marais'?'Marais de Vire-Saule' :
+                key==='clairiere'?'Clairière des Lys' :
+                key==='colline'?'Colline de Rocfauve' :
+                key==='ruines'?'Ruines Oubliées' :
+                key==='grotte'?'Grotte Sépulcrale' : 'Lisière';
+  vp_banner(label, `Jour ${state.day} — ${state.time}`, vp_sceneSVG(key));
+};
+
+/* Afficher une bannière au tout début de l’aventure */
+const _startAdventure_vp = typeof startAdventure==='function' ? startAdventure : null;
+startAdventure = function(){
+  _startAdventure_vp && _startAdventure_vp();
+  vp_banner(state.location, `Jour ${state.day} — ${state.time}`, vp_sceneSVG(state.locationKey));
+};
+
+/* ---------- 4) Visuals PNJ (hook des événements) ---------- */
+function vp_wrapPNJ(pnjType, title, originalFn){
+  return function(){
+    vp_row(vp_pnjSVG(pnjType), title);
+    originalFn();
+  };
+}
+if(typeof eventHerbalist==='function') eventHerbalist = vp_wrapPNJ('herboriste','Herboriste', eventHerbalist);
+if(typeof eventSmith==='function')      eventSmith      = vp_wrapPNJ('forgeron','Forgeron', eventSmith);
+if(typeof eventHermit==='function')     eventHermit     = vp_wrapPNJ('ermite','Ermite', eventHermit);
+if(typeof eventBard==='function')       eventBard       = vp_wrapPNJ('barde','Barde', eventBard);
+if(typeof eventVillage==='function'){
+  const _evVillage = eventVillage;
+  eventVillage = function(){
+    vp_banner('Village de Mirval','Marché • Guilde • Taverne', vp_sceneSVG('village'));
+    _evVillage();
+  };
+}
+
+/* ---------- 5) Cartes Combat (début / victoire) ---------- */
+const _combat_vp = typeof combat==='function' ? combat : null;
+combat = function(mon){
+  vp_row(vp_mobSVG(mon.name), `⚔️ Combat — ${mon.name}`, [
+    `PV ${mon.hp}`, `Armure ${mon.ac}`
+  ]);
+  _combat_vp(mon);
+};
+const _afterCombat_vp = typeof afterCombat==='function' ? afterCombat : null;
+afterCombat = function(){
+  const en = state.enemy ? state.enemy.name : 'ennemi';
+  vp_row(vp_mobSVG(en), `✅ Victoire — ${en}`, [
+    `Or +?`, `XP +?`
+  ]);
+  _afterCombat_vp();
+};
+
+/* ---------- 6) Visuals pour événements spéciaux ---------- */
+if(typeof eventWitchGate==='function'){
+  const _wg = eventWitchGate;
+  eventWitchGate = function(){
+    vp_banner('Portail des Brumes','Le voile s’ouvre…', vp_sceneSVG('marais'));
+    _wg();
+  };
+}
