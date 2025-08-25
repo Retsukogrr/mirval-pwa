@@ -1,8 +1,10 @@
 /* ============================================================
-   Aventurier de Mirval — v10 (stable) 
-   - Correctifs: menu classes, alias ui.loc, “Continuer” unique,
-                 combat non bloquant, boot DOM-safe
-   - Gameplay: Marché, Guilde/contrats, fragments (drop%), torche, boss
+   Aventurier de Mirval — v10 (boss+combat)
+   Correctifs: classes au boot, alias ui.loc, "Continuer" unique,
+               combat non bloquant, boot DOM-safe
+   Ajouts: combats plus fréquents, actions dédiées (Chasser/Patrouiller),
+           2e boss: Sorcière des Brumes (débloqué avec 3 fragments)
+           village/marché/guilde, équipements, fragments (% drop), torche
    ============================================================ */
 
 /* ---------- RNG (graine) ---------- */
@@ -24,7 +26,7 @@ function bindUI(){
   ];
   ids.forEach(id => ui[id] = document.getElementById(id));
   if (ui.seedInfo) ui.seedInfo.textContent = `seed ${rng.seed}`;
-  // ✅ Alias legacy pour compat compat: certains blocs utilisent ui.loc
+  // ✅ Alias legacy: certains blocs utilisent ui.loc
   ui.loc = ui.location;
 }
 
@@ -34,7 +36,7 @@ function write(html, cls=""){ const p=document.createElement('p'); if(cls) p.cla
 function clearChoices(){ ui.choices.innerHTML=''; }
 function addChoice(label, cb, primary=false){
   const b=document.createElement('button'); if(primary) b.classList.add('btn-primary'); b.textContent=label;
-  // petit lock anti-double-clic
+  // Anti-double-clic
   b.addEventListener('click', () => {
     if (state._lockClicks) return;
     state._lockClicks = true;
@@ -50,29 +52,25 @@ function initialState(){
     cls: "—",
     hasChosenClass: false,
 
-    // Attributs (clairs)
     attrs: { STR:1, AGI:1, WIS:1 },
 
-    // Progression
     hp: 20, hpMax: 20, gold: 10, level: 1, xp: 0, rep: 0,
 
-    // Monde
     day: 1, time: "Aube",
     location: "Lisière de la forêt de Mirval",
     locationKey: "clairiere",
 
-    // Inventaire & équipements
     inventory: [
       {name:"Vieille épée", desc:"+1 ATQ", mods:{atk:1}}
     ],
     potions: 1,
     equips: { weapon: null, armor: null, offhand: null },
 
-    // Flags & quêtes
     flags: {
       torch:false, fragments:0,
       metHerbalist:false, metSmith:false, peasantSaved:false,
-      rumors:0, bossUnlocked:false,
+      rumors:0, bossUnlocked:false,          // Chef Bandit
+      witchUnlocked:false,                   // Sorcière des Brumes
       ruinsUnlocked:true, grottoUnlocked:false,
       charm:false, oracleSeen:false
     },
@@ -80,14 +78,13 @@ function initialState(){
       main:{title:'Le Chef Bandit', state:'En cours'},
       side:[],
       artifacts:{title:'Fragments d’artefact (0/3)', state:'En cours'},
-      board:[]
+      board:[],
+      witch:{title:'Brumes de la Sorcière', state:'Fragments requis (0/3)'}
     },
 
-    // Combat
     inCombat:false, enemy:null,
     skill:{name:"", cooldown:0, cd:0, desc:"", use:()=>{}},
 
-    // UI
     lastLabels:[],
     _lockClicks:false
   };
@@ -100,7 +97,7 @@ function playerAtkMod(){
   if(state.cls==='Guerrier') m+=2;
   if(state.attrs.STR>=3) m+=1;
   if (state.equips.weapon && state.equips.weapon.mods?.atk) m += state.equips.weapon.mods.atk;
-  if (state.inventory.some(i=>i.name==='Épée affûtée')) m+=1; // rétro compat
+  if (state.inventory.some(i=>i.name==='Épée affûtée')) m+=1;
   return m;
 }
 function playerDef(){
@@ -167,6 +164,11 @@ function setStats(){
   aq.innerHTML=`<b>Fragments d’artefact (${state.flags.fragments}/3)</b><span>${state.quests.artifacts.state}</span>`;
   ui.quests.appendChild(aq);
 
+  const wq=document.createElement('div'); wq.className='stat';
+  let st = state.flags.fragments>=3 ? 'Prête: affronter la Sorcière' : `Fragments requis (${state.flags.fragments}/3)`;
+  wq.innerHTML=`<b>${state.quests.witch.title}</b><span>${st}</span>`;
+  ui.quests.appendChild(wq);
+
   state.quests.side.forEach(q=>{
     const x=document.createElement('div'); x.className='stat';
     x.innerHTML=`<b>${q.title}</b><span>${q.state}</span>`;
@@ -214,7 +216,7 @@ function continueBtn(next=()=>explore()){
   addChoice("Continuer", next, true);
 }
 
-/* ---- Base actions ---- */
+/* ---- Actions de base & dédiées combat ---- */
 function searchArea(){
   clearChoices();
   const bonus = state.attrs.WIS>=3?1:0;
@@ -222,10 +224,24 @@ function searchArea(){
 
   if(total>=19){ write(`${svgIcon('chest')} Recherche exceptionnelle : un coffre scellé !`,'good'); chest(); }
   else if(total>=14){ write('✨ Tu déniches quelques pièces.','good'); changeGold(rng.between(3,8)); }
-  else if(total>=10){ write('Des traces fraîches… une rencontre approche.','info'); if(rng.rand()<0.55) randomEncounter(); }
+  else if(total>=10){ write('Des traces fraîches… une rencontre approche.','info'); if(rng.rand()<0.65) randomEncounter(); }
   else { write('Aïe ! Des ronces t’écorchent.','bad'); damage(rng.between(1,3),'Ronces'); }
 
   continueBtn();
+}
+
+// Nouvelles actions pour provoquer le combat (sans changer la difficulté)
+function huntBeast(){
+  clearChoices();
+  write('Tu suis des empreintes fraîches…');
+  const roll = rng.rand();
+  if(roll<0.5) combat(mobTemplates.wolf());
+  else combat(mobTemplates.boar());
+}
+function patrolRoad(){
+  clearChoices();
+  write('Tu patrouilles les sentiers à l’affût de bandits…');
+  combat(mobTemplates.bandit());
 }
 
 function rest(){
@@ -256,9 +272,10 @@ function chest(){
 function randomEncounter(){
   const roll=rng.rand();
   const zone=state.locationKey;
-  if(roll<0.55){
+  if(roll<0.62){ // légère hausse pour garantir des combats
     if(zone==='marais') combat(mobTemplates.ghoul());
     else if(zone==='clairiere') combat(mobTemplates.bandit());
+    else if(zone==='grotte') combat(mobTemplates.ancientGhoul());
     else combat(mobTemplates.wolf());
   }else{
     [eventSanctuary,eventHerbalist,eventSmith,eventHermit,eventBard][rng.between(0,4)]();
@@ -286,7 +303,7 @@ function setTimeAndMaybeTick(){
 /* ---- Exploration ---- */
 function explore(initial=false){
   setStats();
-  ui.location.textContent = state.location; // ✅ alias géré
+  ui.location.textContent = state.location;
   ui.day.textContent = `Jour ${state.day} — ${state.time}`;
   clearChoices();
   if(!initial) setTimeAndMaybeTick();
@@ -307,26 +324,25 @@ function explore(initial=false){
   if(zone==='marais'){
     pool.push({label:'Suivre des feux-follets', act:eventSanctuary, w:2});
     pool.push({label:'Traquer une goule', act:()=>combat(mobTemplates.ghoul()), w:3});
-    pool.push({label:'Affronter un loup', act:()=>combat(mobTemplates.wolf()), w:2});
+    pool.push({label:'Chasser un prédateur', act:huntBeast, w:2});                // nouveau
     pool.push({label:'Aider un captif', act:()=>{ if(!state.flags.peasantSaved) eventPeasant(); else { write('La berge est silencieuse.'); continueBtn(); }}, w:1});
+    if(state.flags.fragments>=3){ pool.push({label:'→ Antre des Brumes', act:eventWitchGate, w:1}); } // accès boss 2
   }
   else if(zone==='clairiere'){
     pool.push({label:'Croiser une herboriste', act:eventHerbalist, w:2});
-    pool.push({label:'Écouter un barde', act:eventBard, w:1});
+    pool.push({label:'Patrouiller contre les bandits', act:patrolRoad, w:2});    // nouveau
     pool.push({label:'Chasser un sanglier', act:()=>combat(mobTemplates.boar()), w:2});
-    pool.push({label:'Autel moussu', act:eventSanctuary, w:2});
-    pool.push({label:'Bandits embusqués', act:()=>combat(mobTemplates.bandit()), w:2});
-    // Accès village
+    pool.push({label:'Autel moussu', act:eventSanctuary, w:1});
     pool.push({label:'Rejoindre le village', act:eventVillage, w:1});
   }
   else if(zone==='colline'){
     pool.push({label:'Rencontrer un ermite', act:eventHermit, w:1});
-    pool.push({label:'Explorer des ruines', act:eventRuins, w:2});
+    pool.push({label:'Explorer des ruines', act:eventRuins, w:3});
     pool.push({label:'Affronter une harpie', act:()=>combat(mobTemplates.harpy()), w:3});
     pool.push({label:'Croiser un forgeron itinérant', act:eventSmith, w:1});
   }
   else if(zone==='ruines'){
-    pool.push({label:'Fouiller les décombres', act:eventRuins, w:3});
+    pool.push({label:'Fouiller les décombres', act:eventRuins, w:4});
     pool.push({label:'Éboulement traître', act:()=>{ damage(rng.between(1,4),'Éboulement'); continueBtn(); }, w:1});
     pool.push({label:'Bandits dans l’ombre', act:()=>combat(mobTemplates.bandit()), w:2});
   }
@@ -336,6 +352,7 @@ function explore(initial=false){
   }
 
   if(state.flags.bossUnlocked) pool.push({label:"Traquer le Chef Bandit", act:combatBoss, w:1});
+  if(state.flags.witchUnlocked) pool.push({label:"Affronter la Sorcière des Brumes", act:combatWitch, w:1});
 
   const nav=[
     {label:'→ Marais', act:()=>gotoZone('marais'), w:1},
@@ -345,8 +362,8 @@ function explore(initial=false){
     {label:'→ Grotte', act:()=> state.flags.torch? gotoZone('grotte') : (write('Il fait trop sombre pour entrer.','warn'), continueBtn()), w:1}
   ].filter(x=>x.w>0);
 
-  const dyn = pickWeighted(pool, 3 + (rng.rand()<0.4?1:0));
-  const all = pickWeighted([...base, ...dyn, ...nav], 4);
+  const dyn = pickWeighted(pool, 3 + (rng.rand()<0.5?1:0)); // un peu plus dynamique
+  const all = pickWeighted([...base, ...dyn, ...nav], 5);    // 5 choix visibles
   all.forEach((c,i)=> addChoice(c.label, c.act, i===0));
 }
 
@@ -410,10 +427,13 @@ function eventRuins(){
     const {total}=d20(state.attrs.WIS>=3?1:0);
     if(total>=16){
       if(!state.flags.torch){ state.flags.torch=true; addItem('Torche ancienne','Permet d’explorer la grotte'); }
-      else if(state.flags.fragments<3 && rng.rand()<0.55){ state.flags.fragments++; write('Tu trouves un fragment d’artefact.','good'); }
-      else { chest(); }
+      else if(state.flags.fragments<3 && rng.rand()<0.55){
+        state.flags.fragments++; write('Tu trouves un fragment d’artefact.','good');
+        if(state.flags.fragments>=3){ state.flags.witchUnlocked=true; state.quests.witch.state='Prête: affronter la Sorcière'; write('🌫️ Les brumes frémissent… un passage s’ouvre quelque part dans le marais.','info'); }
+      } else { chest(); }
     } else if(total>=10){ chest(); }
     else { damage(rng.between(2,5),'Éboulement'); }
+    setStats();
     continueBtn();
   }, true);
   addChoice('Partir', continueBtn);
@@ -541,6 +561,18 @@ function autoEquip(){
   const bestA = state.inventory.filter(i=>i.mods?.def).sort((a,b)=>(b.mods.def||0)-(a.mods.def||0))[0]||null;
   state.equips.weapon = bestW;
   state.equips.armor = bestA;
+}
+
+/* ---- Portail pour la Sorcière ---- */
+function eventWitchGate(){
+  clearChoices();
+  write('🌫️ Les brumes s’ouvrent sur un sentier caché…');
+  addChoice('S’enfoncer dans les brumes', ()=>{
+    state.flags.witchUnlocked = true; // sécurité
+    write('Un chuchotement glisse à ton oreille…','warn');
+    continueBtn(()=>combatWitch());
+  }, true);
+  addChoice('Rebrousser chemin', continueBtn);
 }
 /* ===================== COMBAT ===================== */
 
