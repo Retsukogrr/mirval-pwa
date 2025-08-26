@@ -91,9 +91,11 @@
         <div class="stat"><b>Nom</b><span id="p-name">Eldarion</span></div>
         <div class="stat"><b>Classe</b><span id="p-class">—</span></div>
         <div class="attrs">
+          <!-- IDs historiques (utilisés par ton coeur de jeu) -->
           <span class="chip">FOR <b id="a-str">1</b></span>
           <span class="chip">DEX <b id="a-agi">1</b></span>
           <span class="chip">ESPRIT <b id="a-wis">1</b></span>
+          <!-- Rien d’autre à changer ici -->
           <span class="chip">Réputation <b id="rep-label">Neutre</b> (<span id="rep">0</span>)</span>
         </div>
         <div class="stat">
@@ -117,7 +119,7 @@
         <div class="title">
           <h2 id="location">Lisière de la forêt de Mirval</h2>
           <span class="meta" id="day">Jour 1 — Aube</span>
-          <!-- Ruban événement du jour (affiché/masqué par game.js) -->
+          <!-- Ruban événement du jour (optionnel, non bloquant) -->
           <span id="worldEventBadge" class="badge badge-event" style="display:none"></span>
         </div>
 
@@ -131,6 +133,31 @@
       </main>
     </div>
   </div>
+
+  <!-- Ton jeu -->
   <script src="game.js"></script>
+
+  <!-- 🔧 Shim anti-bug d’alias UI :
+       Certains patchs référencent ui.astr / ui.aagi / ui.awis.
+       On les mappe vers les IDs historiques a-str / a-agi / a-wis
+       pour éviter TOUT plantage au démarrage. -->
+  <script>
+  (function(){
+    function aliasStats(){
+      try{
+        if(!window.ui) return; // pas encore bind
+        ui.astr = ui.astr || document.getElementById('a-str');
+        ui.aagi = ui.aagi || document.getElementById('a-agi');
+        ui.awis = ui.awis || document.getElementById('a-wis');
+      }catch(e){}
+    }
+    // Essai immédiat (si game.js a déjà bind)
+    aliasStats();
+    // Sécurité : re-essaie juste après le boot du jeu
+    window.addEventListener('load', aliasStats);
+    // Micro-retard pour les cas où game.js se bind en différé
+    setTimeout(aliasStats, 120);
+  })();
+  </script>
 </body>
 </html>
