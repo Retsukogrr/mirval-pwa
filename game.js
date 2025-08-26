@@ -3460,3 +3460,17 @@ if (state.flags.brumeFragments >= 3) {
   // Sécurité : une première MAJ du badge au boot
   setTimeout(()=>{ try{ updateWorldEventBadge(); }catch(_){ } }, 120);
 })();
+// --- PATCH ultime : forcer l'affichage du menu de classe si rien n'est choisi ---
+(function ensureClassMenu(){
+  try{
+    if (!state || state.hasChosenClass) return;
+    if (!state.cls || state.cls === '—') {
+      // Si aucun bouton à l'écran ou pas de classe choisie → on (re)force le menu
+      if (!ui.choices || ui.choices.childElementCount === 0) {
+        clearChoices();
+        write("Nouvelle partie — choisis ta classe.", "sys");
+        chooseClass();
+      }
+    }
+  }catch(e){}
+})();
