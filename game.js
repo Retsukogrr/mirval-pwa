@@ -2181,3 +2181,39 @@ if(typeof eventWitchGate==='function'){
   setTimeout(()=>{ try{ if(!state.equips.weapon && state.inventory?.length) autoEquip(); }catch(_){ } }, 80);
 
 })();
+/* ============================================================
+   Mirval v10 — Patch Stats Dynamiques (complément Pack Équipement 2.0)
+   ============================================================ */
+(function(){
+
+  // Sauvegarder anciennes valeurs pour comparer
+  let prevStats = {STR:state.attrs.STR, AGI:state.attrs.AGI, WIS:state.attrs.WIS};
+
+  const _setStats_equips = setStats;
+  setStats = function(){
+    _setStats_equips();
+    try{
+      const eff = effectiveAttrs();
+      ['STR','AGI','WIS'].forEach(stat=>{
+        const oldVal = prevStats[stat]||0;
+        const newVal = eff[stat];
+        const uiEl = (stat==='STR')?ui.astr:(stat==='AGI')?ui.aagi:ui.awis;
+
+        if(newVal>oldVal){
+          uiEl.textContent = newVal;
+          uiEl.style.color = '#22c55e'; // vert
+          write(`+${newVal-oldVal} ${stat} (total: ${newVal})`,'good');
+        } else if(newVal<oldVal){
+          uiEl.textContent = newVal;
+          uiEl.style.color = '#ef4444'; // rouge
+          write(`${newVal-oldVal} ${stat} (total: ${newVal})`,'bad');
+        } else {
+          uiEl.textContent = newVal;
+          uiEl.style.color = '#e5e7eb'; // neutre
+        }
+        prevStats[stat] = newVal;
+      });
+    }catch(e){ console.error("Erreur stats dynamiques:", e); }
+  };
+
+})();
