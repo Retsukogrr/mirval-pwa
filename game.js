@@ -2217,3 +2217,17 @@ if(typeof eventWitchGate==='function'){
   };
 
 })();
+if (typeof state.flags.brumeFragments === 'undefined') {
+  state.flags.brumeFragments = 0; // Compteur pour fragments de brume
+}
+if (zone==='marais' && rng.rand() < 0.25) {
+  state.flags.brumeFragments++;
+  write("🌫️ Tu trouves un Fragment de brume.", "good");
+}
+const bq = document.createElement('div');
+bq.className='stat';
+bq.innerHTML = `<b>Fragments de brume</b><span>${state.flags.brumeFragments}/3</span>`;
+ui.quests.appendChild(bq);
+if (state.flags.brumeFragments >= 3) {
+  addChoice("→ Antre de la Sorcière des Brumes", ()=>bossSorciere());
+}
