@@ -1861,3 +1861,43 @@ if(typeof eventWitchGate==='function'){
   setTimeout(()=>{ try{ if(!state.equips.weapon && state.inventory?.length) autoEquip(); }catch(_){} }, 50);
 
 })();
+/* ============================================================
+   Correctif v10 — Stats effectives + combat ours
+   ============================================================ */
+(function(){
+
+  // --- 1) Forcer l’UI à afficher les stats effectives ---
+  const _setStats_prev = setStats;
+  setStats = function(){
+    _setStats_prev();
+    try{
+      const eff = effectiveAttrs();
+      ui.astr.textContent = eff.STR;
+      ui.aagi.textContent = eff.AGI;
+      ui.awis.textContent = eff.WIS;
+    }catch(e){ console.error("Erreur setStats eff:", e); }
+  };
+
+  // --- 2) Corriger les combats (ours et cie) ---
+  if(typeof extraMobs!=='undefined'){
+    if(!extraMobs.bear){
+      extraMobs.bear = ()=>({name:"Ours colossal",hp:20,maxHp:20,ac:13,hitMod:4,tier:3});
+    }
+  }
+
+  // Injecter dans l’exploration : zone colline → ours possible
+  const _explore_prev = explore;
+  explore = function(initial=false){
+    _explore_prev(initial);
+
+    try{
+      if(state.locationKey==='colline'){
+        const labels=[...document.querySelectorAll('#choices button')].map(b=>b.textContent);
+        if(!labels.some(t=>/Ours colossal/i.test(t))){
+          addChoice("Combattre un Ours colossal", ()=>combat(extraMobs.bear()));
+        }
+      }
+    }catch(e){ console.error("Erreur injection ours:",e); }
+  };
+
+})();
