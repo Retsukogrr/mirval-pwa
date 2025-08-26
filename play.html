@@ -1,98 +1,81 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aventurier de Mirval — v10</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aventurier de Mirval — v10</title>
+<meta name="theme-color" content="#0e0f13" />
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root{
+    --bg:#0e0f13; --panel:#171923; --accent:#6ee7b7;
+    --muted:#a6b0c0; --danger:#ef4444; --warn:#f59e0b;
+    --ok:#22c55e; --info:#60a5fa; --text:#e5e7eb;
+    --btn:#1f2937; --btn-hover:#273244;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Noto Sans",Arial}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+  h1{margin:0;font-size:clamp(1.1rem,2.6vw,1.8rem)}
+  .badge{font-size:12px;padding:4px 8px;border-radius:999px;
+         background:#0b1220;border:1px solid #1f2a3a;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,#151826,#0f1320);
+         border:1px solid #273244;border-radius:14px;padding:14px;
+         box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+  .title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .title h2{margin:0;font-size:1.05rem}
+  .meta{color:var(--muted);font-size:12px}
+  .stat{display:grid;grid-template-columns:1fr auto;gap:6px;
+        align-items:center;margin:6px 0;padding:8px 10px;
+        border-radius:10px;background:linear-gradient(180deg,#111422,#0c101b);
+        border:1px solid #222a3a}
+  .attrs,.chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:#0f1422;border:1px solid #22304a;color:#b9c2d0;
+        border-radius:999px;padding:4px 8px;font-size:12px}
+  .inv{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .bar{height:10px;background:#0b0e15;border-radius:999px;
+       overflow:hidden;border:1px solid #2a3448}
+  .bar>i{display:block;height:100%;
+         background:linear-gradient(90deg,#60a5fa,#34d399);width:50%}
+  .log{height:300px;overflow:auto;
+       background:linear-gradient(180deg,#0d111b,#0a0f18);
+       border:1px solid #213049;border-radius:12px;padding:10px;font-size:14px}
+  .log p{margin:0 0 8px}
+  .log .sys{color:#9aa3b2}
+  .log .good{color:var(--ok)}
+  .log .bad{color:var(--danger)}
+  .log .warn{color:var(--warn)}
+  .log .info{color:var(--info)}
+  .choices{display:grid;gap:10px;margin-top:10px}
+  button{appearance:none;border:0;background:var(--btn);color:#e7ecf5;
+         padding:16px 18px;border-radius:12px;cursor:pointer;
+         border:1px solid #2c3a54;
+         transition:transform .05s ease, background .12s ease, border-color .12s ease;
+         text-align:left;font-size:18px;line-height:1.3}
+  button:hover{background:var(--btn-hover);border-color:#3a4a68}
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:#1c2a3d;border-color:#3a4a68}
+  .btn-danger{background:#3a1f22;border-color:#6b2d33}
+  .footer{margin-top:10px;display:flex;justify-content:space-between;
+          gap:10px;flex-wrap:wrap;color:#9aa3b2;font-size:12px}
 
-  <!-- PWA / iOS -->
-  <meta name="theme-color" content="#0e0f13" />
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-  <style>
-    :root{
-      --bg:#0e0f13; --panel:#171923; --accent:#6ee7b7;
-      --muted:#a6b0c0; --danger:#ef4444; --warn:#f59e0b;
-      --ok:#22c55e; --info:#60a5fa; --text:#e5e7eb;
-      --btn:#1f2937; --btn-hover:#273244;
-    }
-    *{box-sizing:border-box}
-    /* ===== Visual Pack Styles ===== */
-.vp-card{border:1px solid #22304a;background:linear-gradient(180deg,#0e1322,#0b1020);
-  border-radius:12px;padding:10px;margin:10px 0;box-shadow:0 6px 20px rgba(0,0,0,.25)}
-.vp-banner{display:flex;gap:12px;align-items:center}
-.vp-title{font-weight:700;font-size:16px;color:#e5e7eb}
-.vp-sub{font-size:12px;color:#9aa3b2;margin-top:2px}
-.vp-row{display:flex;gap:12px;align-items:center}
-.vp-row-title{font-weight:600;color:#e5e7eb}
-.vp-row-sub{font-size:12px;color:#a6b0c0}
-.vp-svg{flex:0 0 auto;display:flex;align-items:center;justify-content:center}
-    body{
-      margin:0; background:var(--bg); color:var(--text);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Noto Sans",Arial
-    }
-    .wrap{max-width:1100px;margin:0 auto;padding:16px}
-    header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
-    h1{margin:0;font-size:clamp(1.1rem,2.6vw,1.8rem)}
-    .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0b1220;border:1px solid #1f2a3a;color:var(--muted)}
-    .grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
-    @media (max-width:860px){.grid{grid-template-columns:1fr}}
-
-    .panel{
-      background:linear-gradient(180deg,#151826,#0f1320);
-      border:1px solid #273244; border-radius:14px; padding:14px;
-      box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)
-    }
-    .title{display:flex;align-items:center;gap:10px}
-    .title h2{margin:0;font-size:1.05rem}
-    .meta{color:var(--muted);font-size:12px}
-
-    .stat{
-      display:grid; grid-template-columns:1fr auto; gap:6px; align-items:center;
-      margin:6px 0; padding:8px 10px; border-radius:10px;
-      background:linear-gradient(180deg,#111422,#0c101b); border:1px solid #222a3a
-    }
-    .attrs,.chips{display:flex;flex-wrap:wrap;gap:6px}
-    .chip{background:#0f1422;border:1px solid #22304a;color:#b9c2d0;
-      border-radius:999px;padding:4px 8px;font-size:12px}
-
-    .inv{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-
-    .bar{height:10px;background:#0b0e15;border-radius:999px;overflow:hidden;border:1px solid #2a3448}
-    .bar>i{display:block;height:100%;background:linear-gradient(90deg,#60a5fa,#34d399);width:50%}
-
-    .log{
-      height:300px; overflow:auto;
-      background:linear-gradient(180deg,#0d111b,#0a0f18);
-      border:1px solid #213049; border-radius:12px; padding:10px;
-      font-size:14px
-    }
-    .log p{margin:0 0 8px}
-    .log .sys{color:#9aa3b2}
-    .log .good{color:var(--ok)}
-    .log .bad{color:var(--danger)}
-    .log .warn{color:var(--warn)}
-    .log .info{color:var(--info)}
-
-    .choices{display:grid;gap:10px;margin-top:10px}
-    button{
-      appearance:none; border:0; background:var(--btn); color:#e7ecf5;
-      padding:16px 18px; border-radius:12px; cursor:pointer; text-align:left;
-      border:1px solid #2c3a54;
-      transition:transform .05s ease, background .12s ease, border-color .12s ease;
-      font-size:18px; line-height:1.3
-    }
-    button:hover{background:var(--btn-hover);border-color:#3a4a68}
-    button:active{transform:translateY(1px)}
-    .btn-primary{background:#1c2a3d;border-color:#3a4a68}
-    .btn-danger{background:#3a1f22;border-color:#6b2d33}
-
-    .footer{margin-top:10px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:#9aa3b2;font-size:12px}
-    .divider{height:1px;background:#243044;margin:10px 0}
-  </style>
+  /* Ruban "Événement du jour" */
+  .badge-event{
+    background:#10182a;
+    border-color:#2a3b59;
+    color:#cfe3ff;
+    display:inline-block;
+  }
+  .badge-event--good{ color:#bef7d0; border-color:#2b5e50; background:#0f1f1a; }
+  .badge-event--warn{ color:#ffd7aa; border-color:#5c3c1e; background:#1a1410; }
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -104,36 +87,26 @@
     <div class="grid">
       <!-- === Sidebar : Personnage === -->
       <aside class="panel">
-        <div class="title">
-          <h2>Personnage</h2>
-          <span class="meta" id="seedInfo"></span>
-        </div>
-
+        <div class="title"><h2>Personnage</h2><span class="meta" id="seedInfo"></span></div>
         <div class="stat"><b>Nom</b><span id="p-name">Eldarion</span></div>
         <div class="stat"><b>Classe</b><span id="p-class">—</span></div>
-
         <div class="attrs">
           <span class="chip">FOR <b id="a-str">1</b></span>
           <span class="chip">DEX <b id="a-agi">1</b></span>
           <span class="chip">ESPRIT <b id="a-wis">1</b></span>
           <span class="chip">Réputation <b id="rep-label">Neutre</b> (<span id="rep">0</span>)</span>
         </div>
-
         <div class="stat">
-          <b>Vie</b>
-          <span><span id="hp">20</span>/<span id="hpmax">20</span></span>
+          <b>Vie</b><span><span id="hp">20</span>/<span id="hpmax">20</span></span>
           <div class="bar" style="grid-column:1 / -1;"><i id="hpbar" style="width:100%"></i></div>
         </div>
-
         <div class="stat"><b>Or</b><span id="gold">10</span></div>
         <div class="stat"><b>Niveau</b><span id="lvl">1</span></div>
         <div class="stat"><b>Expérience</b><span id="xp">0</span></div>
         <div class="stat"><b>États</b><span id="status">—</span></div>
-
         <div class="divider"></div>
         <div class="title"><h2>Inventaire</h2></div>
         <div class="inv" id="inventory"></div>
-
         <div class="divider"></div>
         <div class="title"><h2>Quêtes</h2></div>
         <div id="quests" class="inv"></div>
@@ -144,14 +117,13 @@
         <div class="title">
           <h2 id="location">Lisière de la forêt de Mirval</h2>
           <span class="meta" id="day">Jour 1 — Aube</span>
+          <!-- Ruban événement du jour (affiché/masqué par game.js) -->
+          <span id="worldEventBadge" class="badge badge-event" style="display:none"></span>
         </div>
 
         <div class="log" id="log"></div>
-
-        <div class="divider"></div>
         <div class="title"><h2>Que fais-tu ?</h2></div>
         <div class="choices" id="choices"></div>
-
         <div class="footer">
           <div>Choisis à l’instinct. Les conséquences s’affichent après.</div>
           <div id="lastRoll" class="meta"></div>
@@ -159,27 +131,6 @@
       </main>
     </div>
   </div>
-
-  <!-- Service Worker: enregistrement + activation immédiate -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => {
-          if (reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
-          reg.addEventListener('updatefound', () => {
-            const nw = reg.installing;
-            if (nw) nw.addEventListener('statechange', () => {
-              if (nw.state === 'installed' && reg.waiting) {
-                reg.waiting.postMessage({type:'SKIP_WAITING'});
-              }
-            });
-          });
-        })
-        .catch(() => {});
-    }
-  </script>
-
-  <!-- IMPORTANT: cache-buster pour forcer la dernière version du script -->
-  <script src="game.js?v=10.8"></script>
+  <script src="game.js"></script>
 </body>
 </html>
