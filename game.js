@@ -2231,3 +2231,180 @@ ui.quests.appendChild(bq);
 if (state.flags.brumeFragments >= 3) {
   addChoice("→ Antre de la Sorcière des Brumes", ()=>bossSorciere());
 }
+/* ============================================================
+   v10 — PATCH "Fragments de brume" (Option 2, prêt à coller)
+   - Ajoute une ressource distincte: state.flags.brumeFragments
+   - Affichage dédié "Fragments de brume (x/3)" dans la section Quêtes
+   - Drop en MARAIS (combat & fouille), avec chances configurées
+   - L’accès à la Sorcière des Brumes (portail) dépend de brumeFragments
+   - Ne modifie pas les "Fragments d’artefact" (toujours pour la Crypte)
+   ============================================================ */
+(function(){
+  /* ---------- 1) Initialisation état ---------- */
+  if(!state.flags) state.flags = {};
+  if(typeof state.flags.brumeFragments!=='number') state.flags.brumeFragments = 0;
+  if(!state.quests) state.quests = {};
+  // Mini-structure de suivi (non bloquante si tu as déjà un champ witch)
+  if(!state.quests.brume){
+    state.quests.brume = { title:'Fragments de brume', state:'(0/3) — Marais' };
+  }
+
+  /* ---------- 2) Aide format ---------- */
+  function brumeProgressLabel(){
+    const n = state.flags.brumeFragments|0;
+    return `Fragments de brume (${n}/3)`;
+  }
+
+  /* ---------- 3) Affichage Quêtes : injecter/mettre à jour la ligne "Fragments de brume" ---------- */
+  const _setStats = (typeof setStats==='function')? setStats : null;
+  if(_setStats){
+    setStats = function(){
+      _setStats();
+      try{
+        // Retirer ancien "bloc brume" s’il existe
+        const old = document.getElementById('quest-brume-line');
+        if(old && old.parentNode) old.parentNode.removeChild(old);
+
+        // Injecter une ligne dédiée en tête des quêtes
+        if(ui && ui.quests){
+          const wrap = document.createElement('div');
+          wrap.className = 'stat';
+          wrap.id = 'quest-brume-line';
+          const ready = state.flags.brumeFragments>=3 ? 'Prêt : Portail des Brumes' : 'Marais (combat/fouille)';
+          wrap.innerHTML = `<b>${brumeProgressLabel()}</b><span>${ready}</span>`;
+          // L’insérer juste après la première ligne existante de quêtes si possible
+          if(ui.quests.firstChild){
+            ui.quests.insertBefore(wrap, ui.quests.firstChild.nextSibling || ui.quests.firstChild);
+          }else{
+            ui.quests.appendChild(wrap);
+          }
+        }
+      }catch(_){}
+    };
+  }
+
+  /* ---------- 4) Drop des Fragments de brume en MARAIS ---------- */
+  // 4a) En combat (après un combat gagné en MARAIS, ennemis du marais)
+  const _afterCombat = (typeof afterCombat==='function')? afterCombat : null;
+  if(_afterCombat){
+    afterCombat = function(){
+      const wasEnemy = state.enemy ? (state.enemy.name||'').toLowerCase() : '';
+      const inMarsh  = state.locationKey==='marais';
+      const canGain  = state.flags.brumeFragments < 3;
+      // Appel original (récompenses, or, xp, etc.)
+      _afterCombat();
+
+      try{
+        if(inMarsh && canGain){
+          // Chance de drop si l’ennemi est "marécageux" (goule/…)
+          const marshy = /goule|tourbi|brume|marais/.test(wasEnemy);
+          const pct = marshy ? 0.45 : 0.22; // 45% si cible marécageuse, sinon 22%
+          if(Math.random() < pct){
+            state.flags.brumeFragments++;
+            write(`✨ Un fragment de brume s’agrège autour de toi. (${state.flags.brumeFragments}/3)`,'good');
+            if(state.flags.brumeFragments>=3){
+              write('🌫️ Les brumes s’éveillent… Un portail pourrait répondre à ton appel dans le Marais.','info');
+            }
+            setStats();
+          }
+        }
+      }catch(_){}
+    };
+  }
+
+  // 4b) En fouille (searchArea) quand on est dans le MARAIS
+  const _searchArea = (typeof searchArea==='function')? searchArea : null;
+  if(_searchArea){
+    searchArea = function(){
+      const wasMarsh = state.locationKey==='marais';
+      _searchArea();
+      try{
+        if(wasMarsh && state.flags.brumeFragments<3){
+          // Petite chance passive lors d’une fouille réussie (pour éviter la dèche)
+          const p = 0.18; // 18%
+          if(Math.random() < p){
+            state.flags.brumeFragments++;
+            write(`🌫️ Des feux-follets te guident vers un fragment de brume. (${state.flags.brumeFragments}/3)`,'good');
+            if(state.flags.brumeFragments>=3){
+              write('🌘 Un murmure parcourt les roseaux : "Le chemin vers Elle s’ouvre…"','info');
+            }
+            setStats();
+          }
+        }
+      }catch(_){}
+    };
+  }
+
+  /* ---------- 5) Accès à la Sorcière des Brumes = dépend de brumeFragments ---------- */
+  // 5a) Le bouton d’accès dans l’exploration (si tu le crées dynamiquement en Marais)
+  const _explore = (typeof explore==='function')? explore : null;
+  if(_explore){
+    explore = function(initial=false){
+      _explore(initial);
+      try{
+        if(state.locationKey==='marais'){
+          const buttons = Array.from(document.querySelectorAll('#choices button')).map(b=>b.textContent);
+          const hasGateBtn = buttons.some(t=>/Brumes|Sorcière|Antre|Portail/i.test(t));
+          // S’il n’y a pas déjà un bouton vers l’antre, on injecte le bon état
+          if(!hasGateBtn){
+            if(state.flags.brumeFragments>=3){
+              addChoice('→ Antre des Brumes (Sorcière)', ()=>{
+                if(typeof eventWitchGate==='function'){ eventWitchGate(); }
+                else if(typeof combatWitch==='function'){ combatWitch(); }
+                else { write("Le voile s’entrouvre, mais tu n’as pas de prise… (fonction manquante)",'warn'); }
+              });
+            }else{
+              addChoice(`Brumes instables — ${brumeProgressLabel()}`, ()=>{
+                write('Il te manque des fragments de brume. On en trouve surtout en Marais (combats/fouille).','info');
+                continueBtn(()=>explore());
+              });
+            }
+          }
+        }
+      }catch(_){}
+    };
+  }
+
+  // 5b) Sécuriser eventWitchGate() pour qu’il refuse l’accès si <3 fragments
+  if(typeof eventWitchGate==='function'){
+    const _wg = eventWitchGate;
+    eventWitchGate = function(){
+      if(state.flags.brumeFragments>=3){
+        _wg();
+      }else{
+        write('🌫️ Les brumes te repoussent. Il te faut encore des fragments de brume (3 requis).','warn');
+        continueBtn(()=>explore());
+      }
+    };
+  }
+  if(typeof combatWitch==='function'){
+    // Facultatif : on autorise quand même combatWitch si quelqu’un l’appelle direct,
+    // mais ici on peut aussi sécuriser :
+    const _cw = combatWitch;
+    combatWitch = function(){
+      if(state.flags.brumeFragments>=3){ _cw(); }
+      else{
+        write('Le pouvoir des brumes te manque (3 fragments requis).','warn');
+        continueBtn(()=>explore());
+      }
+    };
+  }
+
+  /* ---------- 6) Indices dans le Marais (événements sociaux) ---------- */
+  // Si tu as un événement de sanctuaire en marais, on peut laisser un indice
+  if(typeof eventSanctuary==='function'){
+    const _sanct = eventSanctuary;
+    eventSanctuary = function(){
+      _sanct();
+      try{
+        if(state.locationKey==='marais' && state.flags.brumeFragments<3){
+          write('Des lueurs flottent au ras de l’eau. Elles semblent chercher quelque chose…','meta');
+        }
+      }catch(_){}
+    };
+  }
+
+  /* ---------- 7) Mise à jour immédiate de l’UI ---------- */
+  try{ setStats(); }catch(_){}
+
+})();
