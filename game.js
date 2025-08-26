@@ -1901,3 +1901,283 @@ if(typeof eventWitchGate==='function'){
   };
 
 })();
+/* ============================================================
+   Mirval v10 — PACK ÉQUIPEMENT 2.0
+   À COLLER TOUT EN BAS DE game.js (après tout le reste)
+   - Stats effectives (FOR/DEX/ESPRIT) = base + équipements
+   - Emplacements: weapon, armor, offhand, boots, trinket
+   - Gestion: équiper / retirer / auto-équiper / comparer
+   - UI forcée sur stats effectives
+   - Rareté simple (Common/Rare/Epic/Legendary)
+   - WITHOUT save/load; 100% compatible avec les versions précédentes
+   ============================================================ */
+(function(){
+
+  /* ---------- 0) Préparation état ---------- */
+  if(!state.equips) state.equips = {weapon:null, armor:null, offhand:null, boots:null, trinket:null};
+
+  /* ---------- 1) Rareté (facultative mais utile) ---------- */
+  const RARITY = [
+    {key:'common',     label:'Commun',      mult:1.00, color:'#e5e7eb'},
+    {key:'rare',       label:'Rare',        mult:1.20, color:'#60a5fa'},
+    {key:'epic',       label:'Épique',      mult:1.40, color:'#a78bfa'},
+    {key:'legendary',  label:'Légendaire',  mult:1.65, color:'#f59e0b'}
+  ];
+  function rollRarity(){
+    const r = Math.random();
+    if(r<0.70) return RARITY[0];
+    if(r<0.90) return RARITY[1];
+    if(r<0.98) return RARITY[2];
+    return RARITY[3];
+  }
+  function scale(v,m){ return v?Math.max(1, Math.round(v*m)):0; }
+
+  /* ---------- 2) Catalogue simple pour fabrication ---------- */
+  const BASE_ITEMS = {
+    // Armes
+    'dague_fine':   {name:'Dague fine',       slot:'weapon', mods:{atk:1, AGI:1}, desc:'+1 ATQ, +1 DEX'},
+    'epee_affutee': {name:'Épée affûtée',     slot:'weapon', mods:{atk:1},        desc:'+1 ATQ'},
+    'epee_longue':  {name:'Épée longue',      slot:'weapon', mods:{atk:2, STR:1}, desc:'+2 ATQ, +1 FOR'},
+    // Armures
+    'cuir_leg':     {name:'Armure de cuir',   slot:'armor',  mods:{def:1, AGI:1}, desc:'+1 DEF, +1 DEX'},
+    'cuir_renf':    {name:'Cuir renforcé',    slot:'armor',  mods:{def:2},        desc:'+2 DEF'},
+    'cotte_maille': {name:'Cotte de mailles', slot:'armor',  mods:{def:3},        desc:'+3 DEF'},
+    // Offhand
+    'bouclier_ch':  {name:'Bouclier de chêne',slot:'offhand',mods:{def:1},        desc:'+1 DEF'},
+    'bouclier_fer': {name:'Bouclier en fer',  slot:'offhand',mods:{def:2},        desc:'+2 DEF'},
+    // Bottes
+    'bottes_vit':   {name:'Bottes véloces',   slot:'boots',  mods:{AGI:1, def:1}, desc:'+1 DEX, +1 DEF'},
+    // Talisman
+    'tal_sages':    {name:'Talisman des sages',slot:'trinket',mods:{WIS:2},       desc:'+2 ESPRIT'},
+    'tal_force':    {name:'Talisman de force', slot:'trinket',mods:{STR:2},       desc:'+2 FOR'}
+  };
+
+  function craftItem(baseKey){
+    const base = BASE_ITEMS[baseKey];
+    if(!base) return null;
+    const rar = rollRarity();
+    const mods = base.mods || {};
+    const scaled = {
+      atk: scale(mods.atk, rar.mult),
+      def: scale(mods.def, rar.mult),
+      STR: scale(mods.STR, rar.mult),
+      AGI: scale(mods.AGI, rar.mult),
+      WIS: scale(mods.WIS, rar.mult)
+    };
+    const name = `${base.name} (${rar.label})`;
+    const lines = [];
+    if(scaled.atk) lines.push(`+${scaled.atk} ATQ`);
+    if(scaled.def) lines.push(`+${scaled.def} DEF`);
+    if(scaled.STR) lines.push(`+${scaled.STR} FOR`);
+    if(scaled.AGI) lines.push(`+${scaled.AGI} DEX`);
+    if(scaled.WIS) lines.push(`+${scaled.WIS} ESPRIT`);
+    const desc = (base.desc||'') + (lines.length?` • ${lines.join(' • ')}`:'');
+    return {name, desc, slot:base.slot, mods:scaled, rarity:rar.key, color:rar.color};
+  }
+
+  /* ---------- 3) Stats effectives ---------- */
+  function effectiveAttrs(){
+    const out = {STR:state.attrs.STR, AGI:state.attrs.AGI, WIS:state.attrs.WIS};
+    const eq = state.equips||{};
+    ['weapon','armor','offhand','boots','trinket'].forEach(s=>{
+      const it = eq[s];
+      if(it && it.mods){
+        out.STR += it.mods.STR||0;
+        out.AGI += it.mods.AGI||0;
+        out.WIS += it.mods.WIS||0;
+      }
+    });
+    return out;
+  }
+
+  /* ---------- 4) Affichage UI forcé sur effectif ---------- */
+  const _setStats_base = setStats;
+  setStats = function(){
+    _setStats_base();
+    try{
+      const eff = effectiveAttrs();
+      ui.astr.textContent = eff.STR;
+      ui.aagi.textContent = eff.AGI;
+      ui.awis.textContent = eff.WIS;
+    }catch(e){}
+  };
+
+  /* ---------- 5) Combat utilise les stats effectives ---------- */
+  const _playerAtkMod_base = (typeof playerAtkMod==='function') ? playerAtkMod : ()=>0;
+  playerAtkMod = function(){
+    const eff = effectiveAttrs();
+    let m = 0;
+    if(state.cls==='Guerrier') m += 2;
+    if(eff.STR>=3) m += 1;
+    // bonus d’équipement (arme principale)
+    if(state.equips?.weapon?.mods?.atk) m += state.equips.weapon.mods.atk;
+    // bonus “anciens” objets plats (compat)
+    if(hasItem && hasItem('Épée affûtée')) m += 1;
+    return m + (_playerAtkMod_base?0:0);
+  };
+
+  const _playerDef_base = (typeof playerDef==='function') ? playerDef : ()=>10;
+  playerDef = function(){
+    const eff = effectiveAttrs();
+    let d = 10;
+    if(state.cls==='Paladin') d += 1;
+    if(eff.AGI>=3) d += 1;
+    // cumul DEF des slots
+    d += (state.equips?.armor?.mods?.def||0);
+    d += (state.equips?.offhand?.mods?.def||0);
+    d += (state.equips?.boots?.mods?.def||0);
+    // compat ancien inventaire plat
+    if(hasItem && hasItem('Petite armure')) d+=1;
+    if(hasItem && hasItem('Cuir renforcé')) d+=2;
+    if(hasItem && hasItem('Bouclier en fer')) d+=2;
+    return d;
+  };
+
+  /* ---------- 6) Ajouter proprement un item “équipable” ---------- */
+  function addEquipItem(baseKey){
+    const it = craftItem(baseKey);
+    if(!it) return null;
+    // On réutilise addItem pour l’UI, puis on enrichit l’entrée stockée
+    addItem(it.name, it.desc);
+    const ref = state.inventory[state.inventory.length-1];
+    ref.slot   = it.slot;
+    ref.mods   = it.mods;
+    ref.rarity = it.rarity;
+    ref.color  = it.color;
+    return ref;
+  }
+
+  /* ---------- 7) Score d’un item & auto-équiper ---------- */
+  function gearScore(it){
+    if(!it||!it.mods) return 0;
+    const eff = effectiveAttrs();
+    // pondération simple, robuste
+    return (it.mods.atk||0) * (1 + Math.max(0,eff.STR-1)*0.25)
+         + (it.mods.def||0) * (1 + Math.max(0,eff.AGI-1)*0.20)
+         + (it.mods.STR||0)*0.9 + (it.mods.AGI||0)*0.9 + (it.mods.WIS||0)*0.9;
+  }
+  function bestOfSlot(slot){
+    return state.inventory.filter(i=>i.slot===slot).sort((a,b)=>gearScore(b)-gearScore(a))[0]||null;
+  }
+  function autoEquip(){
+    state.equips = state.equips || {};
+    ['weapon','armor','offhand','boots','trinket'].forEach(slot=>{
+      const best = bestOfSlot(slot);
+      if(best) state.equips[slot]=best;
+    });
+    setStats();
+  }
+
+  /* ---------- 8) Menu de gestion d’équipement ---------- */
+  function manageGear(){
+    clearChoices();
+    const eff = effectiveAttrs();
+    write(`🧰 <b>Équipement</b> — FOR ${eff.STR} • DEX ${eff.AGI} • ESPRIT ${eff.WIS}`,'info');
+
+    function slotUI(slot,label){
+      const cur = state.equips?.[slot];
+      write(`<i>${label} :</i> ${cur?`<b style="color:${cur.color||'#e5e7eb'}">${cur.name}</b> — ${cur.desc}`:'(aucun)'}`);
+      if(cur){
+        addChoice(`↩️ Retirer ${label}`, ()=>{
+          state.equips[slot]=null; write(`${label} retiré.`,'warn'); setStats(); manageGear();
+        });
+      }
+      const choices = state.inventory.map((it,i)=>({it,i})).filter(o=>o.it.slot===slot);
+      choices.forEach(o=>{
+        addChoice(`Équiper: ${o.it.name}`, ()=>{
+          const before = state.equips[slot];
+          state.equips[slot] = o.it;
+          const sBefore = before?gearScore(before):0, sNew=gearScore(o.it);
+          write(`${label}: ${before?before.name:'(vide)'} → <b style="color:${o.it.color||'#e5e7eb'}">${o.it.name}</b> (score ${sBefore.toFixed(1)} → ${sNew.toFixed(1)})`,'good');
+          setStats(); manageGear();
+        });
+      });
+      if(!choices.length) addChoice(`Aucun objet pour ${label}`, ()=>manageGear());
+      addChoice('—', ()=>{}, false);
+    }
+
+    slotUI('weapon','Arme');
+    slotUI('armor','Armure');
+    slotUI('offhand','Bouclier/Offhand');
+    slotUI('boots','Bottes');
+    slotUI('trinket','Talisman');
+
+    addChoice('Auto-équiper', ()=>{ autoEquip(); write('Auto-équiper effectué.','info'); manageGear(); }, true);
+    addChoice('Fermer', ()=>explore(true));
+  }
+
+  /* ---------- 9) Injection du bouton d’accès ---------- */
+  const _explore_core = explore;
+  explore = function(initial=false){
+    _explore_core(initial);
+    try{
+      const labels=[...document.querySelectorAll('#choices button')].map(b=>b.textContent);
+      if(!labels.some(t=>/Gérer l'équipement/i.test(t))){
+        addChoice("Gérer l'équipement", manageGear);
+      }
+    }catch(_){}
+  };
+
+  /* ---------- 10) Donner des objets “équipables” via coffre/forgeron (compat) ---------- */
+  // Cofres : si chest() existe, on l’enrichit légèrement
+  if(typeof chest==='function'){
+    const _chest_prev = chest;
+    chest = function(){
+      const roll = rng.between(1,100);
+      if(roll>60){ // 40% chance d’équipement
+        const poolsByZone = {
+          marais:   ['cuir_renf','bouclier_ch','tal_sages'],
+          grotte:   ['cotte_maille','bouclier_fer','tal_force'],
+          ruines:   ['cotte_maille','bouclier_fer','epee_longue'],
+          colline:  ['bottes_vit','epee_longue','cuir_renf'],
+          clairiere:['dague_fine','epee_affutee','cuir_leg']
+        };
+        const z = state.locationKey || 'clairiere';
+        const pool = poolsByZone[z] || poolsByZone.clairiere;
+        const key = pool[rng.between(0,pool.length-1)];
+        const got = addEquipItem(key);
+        if(got) write(`Tu obtiens <b style="color:${got.color}">${got.name}</b>.`,'good');
+        autoEquip();
+      } else {
+        _chest_prev();
+      }
+    };
+  }
+  // Forgeron : si eventSmith() existe, on lui ajoute une option “équipement de qualité”
+  if(typeof eventSmith==='function'){
+    const _smith_prev = eventSmith;
+    eventSmith = function(){
+      _smith_prev();
+      addChoice('Acheter (qualité variable)', ()=>{
+        clearChoices(); write('⚒️ Forgeron — Qualité variable :', 'info');
+        const offers = ['epee_longue','cotte_maille','bouclier_fer','bottes_vit'];
+        offers.forEach(k=>{
+          const it = craftItem(k);
+          const price = 5 + (it.mods.atk||0)*2 + (it.mods.def||0)*2 + (it.mods.STR||0) + (it.mods.AGI||0) + (it.mods.WIS||0);
+          addChoice(`${it.name} — ${it.desc} (${price} or)`, ()=>{
+            if(state.gold>=price){
+              changeGold(-price);
+              const ref = addEquipItem(k); // on refabrique pour garder même slot
+              // Remplacer par l’objet crafté (mêmes mods/rarity/color)
+              if(ref){
+                ref.name  = it.name;
+                ref.desc  = it.desc;
+                ref.mods  = it.mods;
+                ref.rarity= it.rarity;
+                ref.color = it.color;
+              }
+              autoEquip(); write('Achat effectué.','good');
+            } else write('Pas assez d’or.','warn');
+            continueBtn(eventSmith);
+          });
+        });
+        addChoice('Retour', eventSmith, true);
+      });
+    };
+  }
+
+  /* ---------- 11) Initialisation douce ---------- */
+  // Si aucune arme équipée mais inventaire présent, tenter un auto-équiper après boot
+  setTimeout(()=>{ try{ if(!state.equips.weapon && state.inventory?.length) autoEquip(); }catch(_){ } }, 80);
+
+})();
