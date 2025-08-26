@@ -2408,3 +2408,322 @@ if (state.flags.brumeFragments >= 3) {
   try{ setStats(); }catch(_){}
 
 })();
+/* ============================================================
+   Mirval v10 — Patch "Fragments séparés + Artefact & Crypte"
+   - Sépare clairement:
+       • state.flags.brumeFragments  => Sorcière des Brumes (Portail)
+       • state.flags.artifactFragments => Artefact ancien (Crypte finale)
+   - Fusion auto des fragments d’artefact => "Artefact ancien"
+   - Débloque la Crypte de Mirval + boss final
+   - Met à jour l’UI des quêtes et les événements
+   - 100% compatible avec l’existant (migration depuis flags.fragments)
+   ============================================================ */
+(function(){
+
+  /* ------------------ 1) Migration & flags manquants ------------------ */
+  // Sécurité des drapeaux
+  state.flags = state.flags || {};
+  // Nouveau compteur pour la brume s'il manque
+  if(typeof state.flags.brumeFragments !== 'number') state.flags.brumeFragments = 0;
+  // Nouveau compteur officiel pour les fragments d'artefact
+  if(typeof state.flags.artifactFragments !== 'number'){
+    // Migration : si "fragments" existait déjà, on l’interprète comme fragments d’artefact
+    state.flags.artifactFragments = (typeof state.flags.fragments === 'number') ? state.flags.fragments : 0;
+  }
+  // Débloquages
+  if(typeof state.flags.cryptUnlocked !== 'boolean') state.flags.cryptUnlocked = false;
+  if(typeof state.flags.artifactFused !== 'boolean') state.flags.artifactFused = false;
+
+  // Quêtes : s'assurer que les sections existent
+  state.quests = state.quests || {};
+  state.quests.witch  = state.quests.witch  || {title:'Brumes de la Sorcière', state:`Fragments de brume requis (${state.flags.brumeFragments}/3)`};
+  state.quests.artifacts = state.quests.artifacts || {title:'Fragments d’artefact (0/3)', state:'En cours'};
+  // Harmonise le titre/rendu initial
+  state.quests.artifacts.title = `Fragments d’artefact (${state.flags.artifactFragments}/3)`;
+  if(state.flags.artifactFused){
+    state.quests.artifacts.state = 'Artefact assemblé';
+  }
+
+  /* ------------------ 2) Helpers: fusion & UI ------------------ */
+  function checkArtifactFusion(){
+    if(state.flags.artifactFused) return;
+    if(state.flags.artifactFragments >= 3){
+      state.flags.artifactFused = true;
+      state.flags.cryptUnlocked = true;
+      // Ajouter l'artefact dans l’inventaire si pas déjà
+      if(!hasItem('Artefact ancien')){
+        addItem('Artefact ancien', 'Une relique lumineuse qui ouvre la Crypte de Mirval');
+      }
+      // Narration & quêtes
+      write('✨ Les <b>fragments d’artefact</b> vibrent et se soudent entre tes mains. Tu tiens désormais <b>l’Artefact ancien</b>.', 'good');
+      write('🏛️ Tu sens l’appel d’une porte scellée... La <b>Crypte de Mirval</b> accepte désormais ta venue.', 'info');
+      state.quests.artifacts.state = 'Artefact assemblé';
+      setStats();
+    }
+  }
+
+  // Patch setStats pour afficher les deux compteurs
+  const _setStats = setStats;
+  setStats = function(){
+    _setStats();
+    try{
+      // Réécrit la section quêtes pour inclure "Fragments de brume"
+      const q = ui.quests;
+      if(!q) return;
+      // Effacer et reconstruire (léger, robuste)
+      const old = Array.from(q.querySelectorAll('.stat'));
+      // Si on trouve déjà des blocs, on n'efface pas tout — on met à jour dynamiquement
+      // mais ici, pour la robustesse et éviter doublons, on reconstruit entièrement.
+      q.innerHTML = '';
+
+      // 1) quête principale si existante
+      if(state.quests.main){
+        const a=document.createElement('div'); a.className='stat';
+        a.innerHTML=`<b>${state.quests.main.title}</b><span>${state.quests.main.state||'En cours'}</span>`;
+        q.appendChild(a);
+      }
+
+      // 2) Brumes de la Sorcière (fragments de brume)
+      const wq=document.createElement('div'); wq.className='stat';
+      const wst = state.flags.brumeFragments>=3 ? 'Prête : affronter la Sorcière' : `Fragments de brume (${state.flags.brumeFragments}/3)`;
+      wq.innerHTML=`<b>${state.quests.witch.title}</b><span>${wst}</span>`;
+      q.appendChild(wq);
+
+      // 3) Artefacts (fragments d’artefact)
+      const aq=document.createElement('div'); aq.className='stat';
+      aq.innerHTML=`<b>Fragments d’artefact (${state.flags.artifactFragments}/3)</b><span>${state.quests.artifacts.state||'En cours'}</span>`;
+      q.appendChild(aq);
+
+      // 4) quêtes annexes éventuelles
+      (state.quests.side||[]).forEach(qi=>{
+        const d=document.createElement('div'); d.className='stat';
+        d.innerHTML=`<b>${qi.title}</b><span>${qi.state}</span>`;
+        q.appendChild(d);
+      });
+
+    }catch(e){ /* ignore UI hiccups */ }
+  };
+
+  /* ------------------ 3) Récolte des fragments sé-pa-rés ------------------ */
+
+  // A) Fragments de BRUME : principal dans le MARAIS (fouilles & combats)
+  // Patch léger de randomEncounter pour ajouter du drop de brume dans le marais
+  const _randomEncounter = (typeof randomEncounter==='function') ? randomEncounter : null;
+  randomEncounter = function(){
+    //  Si une ancienne définition existe, on l’utilise puis on rajoute notre drop
+    if(_randomEncounter){
+      const beforeEnemy = state.enemy;
+      _randomEncounter();
+      // si on était en social (pas de combat), on ne touche à rien ici
+      return;
+    } else {
+      // fallback minimal si l’ancien n’existe pas
+      write('Une rencontre imprévue survient...', 'info');
+      continueBtn();
+    }
+  };
+
+  // Drop de brume post-combat dans le marais (et un peu ailleurs très rare)
+  const _afterCombat = (typeof afterCombat==='function') ? afterCombat : null;
+  afterCombat = function(){
+    // Laisser faire la version existante
+    if(_afterCombat) _afterCombat();
+
+    // Si on est au marais: petite chance de fragment de brume
+    if(state.locationKey === 'marais'){
+      if(Math.random() < 0.35){  // 35% marais
+        state.flags.brumeFragments++;
+        write('🌫️ Un <b>fragment de brume</b> se condense près du corps…', 'good');
+        // Débloquer automatiquement la Sorcière si on en a 3
+        if(state.flags.brumeFragments>=3){
+          state.flags.witchUnlocked = true;
+          state.quests.witch.state = 'Prête : affronter la Sorcière';
+          write('🌫️ Le voile frémit : <b>le Portail des Brumes</b> est accessible dans le marais.', 'info');
+        }
+        setStats();
+      }
+    } else {
+      // Très rare hors-marais
+      if(Math.random() < 0.05){
+        state.flags.brumeFragments++;
+        write('🌫️ Un minuscule éclat de brume tourbillonne vers toi… (+1)', 'good');
+        if(state.flags.brumeFragments>=3){
+          state.flags.witchUnlocked = true;
+          state.quests.witch.state = 'Prête : affronter la Sorcière';
+          write('🌫️ Le voile frémit : <b>le Portail des Brumes</b> est accessible dans le marais.', 'info');
+        }
+        setStats();
+      }
+    }
+  };
+
+  // B) Fragments d’ARTEFACT : surtout dans les RUINES (fouilles & coffres)
+  // On enveloppe eventRuins pour forcer le drop sur le bon compteur
+  const _eventRuins = (typeof eventRuins==='function') ? eventRuins : null;
+  if(_eventRuins){
+    eventRuins = function(){
+      clearChoices();
+      write('🏚️ Ruines (fouilles d’artefacts anciennes).');
+
+      addChoice('Fouiller les salles scellées (ESPRIT)', ()=>{
+        const bonus = (state.attrs?.WIS>=3 ? 1 : 0);
+        const {total} = d20(bonus);
+        if(total>=16){
+          // 1) Priorité fragment d’artefact si <3
+          if(state.flags.artifactFragments < 3 && Math.random()<0.65){
+            state.flags.artifactFragments++;
+            write('✨ Tu extrais un <b>fragment d’artefact</b> des gravures.', 'good');
+            setStats();
+            checkArtifactFusion();
+          } else {
+            // 2) Sinon coffre
+            if(typeof chest === 'function') chest(); else write("Tu trouves quelques bricoles…","info");
+          }
+        } else if(total>=10){
+          // Coffre moyen
+          if(typeof chest === 'function') chest(); else write("Tu récupères quelques pièces…","info");
+        } else {
+          damage(rng.between(2,5), 'Éboulement');
+        }
+        continueBtn();
+      }, true);
+
+      addChoice('Descendre à la crypte effondrée (risque)', ()=>{
+        // petit combat de garde ou squelette
+        if(typeof combat === 'function'){
+          if(Math.random()<0.5){
+            // squelette ancien si déf dispo sinon bandit
+            const mob = (typeof extraMobs !== 'undefined' && extraMobs.skeleton) ? extraMobs.skeleton() : {name:'Squelette ancien',hp:14,maxHp:14,ac:13,hitMod:4,tier:2};
+            combat(mob);
+          } else {
+            const mob = (typeof mobTemplates!=='undefined' && mobTemplates.bandit) ? mobTemplates.bandit() : {name:'Bandit',hp:12,maxHp:12,ac:12,hitMod:3,tier:2};
+            combat(mob);
+          }
+        } else {
+          write('Des ombres remuent…', 'warn');
+          continueBtn();
+        }
+      });
+
+      addChoice('Partir', continueBtn);
+    };
+  }
+
+  /* ------------------ 4) Portail Sorcière: bascule sur brumeFragments ------------------ */
+  // S’il existe un eventWitchGate original, on garde; sinon on crée une version simple
+  const _eventWitchGate = (typeof eventWitchGate==='function') ? eventWitchGate : null;
+  function eventWitchGatePatched(){
+    clearChoices();
+    write('🌫️ Les brumes s’ouvrent sur un sentier caché…');
+
+    if(state.flags.brumeFragments < 3){
+      write('Il te manque encore des <b>fragments de brume</b> (3 requis).', 'warn');
+      continueBtn(()=>explore(true));
+      return;
+    }
+
+    addChoice('S’enfoncer dans les brumes', ()=>{
+      state.flags.witchUnlocked = true;
+      write('Un chuchotement glisse à ton oreille…', 'warn');
+      if(typeof combatWitch === 'function') continueBtn(()=>combatWitch());
+      else if(typeof combat === 'function'){
+        const witch = { name:"Sorcière des Brumes", hp:26, maxHp:26, ac:14, hitMod:5, tier:3, dotChance:0.3, dotType:'poison' };
+        continueBtn(()=>combat(witch));
+      }else{
+        continueBtn(()=>explore(true));
+      }
+    }, true);
+
+    addChoice('Rebrousser chemin', continueBtn);
+  }
+  // Remplacement propre
+  window.eventWitchGate = _eventWitchGate ? _eventWitchGate : eventWitchGatePatched;
+
+  /* ------------------ 5) Crypte de Mirval: accès & boss final ------------------ */
+
+  function eventCryptGate(){
+    clearChoices();
+    write('🏛️ Une porte scellée affleure sous les ruines, gravée de glyphes.');
+    if(!state.flags.artifactFused || !hasItem('Artefact ancien')){
+      write('La serrure runique demeure close. Il te faut l’<b>Artefact ancien</b>.', 'warn');
+      return continueBtn(()=>explore(true));
+    }
+    addChoice('Présenter l’Artefact ancien', ()=>{
+      write('La pierre s’ouvre dans un souffle ancien. Un escalier descend dans la nuit.', 'info');
+      continueBtn(()=>combatCryptBoss());
+    }, true);
+    addChoice('Reculer pour l’instant', continueBtn);
+  }
+
+  function combatCryptBoss(){
+    // Boss final — tu peux ajuster ses paramètres
+    const boss = { name:"Seigneur des Ombres", hp:30, maxHp:30, ac:15, hitMod:6, tier:4, dotChance:0.35, dotType:'bleed' };
+    write('🕯️ Dans la pénombre, une silhouette démesurée se détache des colonnes…', 'warn');
+    if(typeof combat === 'function'){
+      combat(boss);
+      // Phase spéciale
+      const _enemyAttackBase = enemyAttack;
+      enemyAttack = function(){
+        if(state.enemy && state.enemy.name==='Seigneur des Ombres'){
+          if(!state.enemy.phase2 && state.enemy.hp <= 22){ state.enemy.phase2=true; state.enemy.hitMod+=1; write('🩸 L’ombre s’épaissit : sa lame murmure.','warn'); }
+          if(!state.enemy.phase3 && state.enemy.hp <= 12){ state.enemy.phase3=true; write('🌑 La salle s’assombrit, ton souffle se condense…','warn'); }
+        }
+        _enemyAttackBase();
+      };
+      // Écran de victoire
+      const _afterCombatBase = afterCombat;
+      afterCombat = function(){
+        if(state.enemy && state.enemy.name==='Seigneur des Ombres'){
+          write('🏁 <b>La Crypte retombe au silence.</b> Un vent tiède balaie les cendres.', 'good');
+          state.quests.main.state = 'Vaincu';
+          // Fin narrative
+          return (typeof ending==='function') ? ending() : continueBtn(()=>explore(true));
+        }
+        _afterCombatBase && _afterCombatBase();
+      };
+    } else {
+      write('Le combat ne peut pas démarrer (méthode combat indisponible).', 'warn');
+      continueBtn();
+    }
+  }
+
+  /* ------------------ 6) Injection en exploration ------------------ */
+  // Ajouter l’accès au Portail (marais) et à la Crypte (ruines) quand débloqués
+  const _explore = explore;
+  explore = function(initial=false){
+    _explore(initial);
+
+    try{
+      const labels = Array.from(document.querySelectorAll('#choices button')).map(b=>b.textContent);
+
+      // Portail des brumes (marais)
+      if(state.locationKey==='marais' && state.flags.witchUnlocked){
+        if(!labels.some(t=>/Portail|Brumes|Sorcière/i.test(t))){
+          addChoice('→ Portail des Brumes (Sorcière)', ()=>{
+            (typeof eventWitchGate === 'function' ? eventWitchGate : eventWitchGatePatched)();
+          });
+        }
+      } else if(state.locationKey==='marais' && state.flags.brumeFragments>=3){
+        // Si on a 3+ brume mais pas encore witchUnlocked, propose le portail aussi
+        if(!labels.some(t=>/Portail|Brumes|Sorcière/i.test(t))){
+          addChoice('→ Portail des Brumes (Sorcière)', ()=>{
+            (typeof eventWitchGate === 'function' ? eventWitchGate : eventWitchGatePatched)();
+          });
+        }
+      }
+
+      // Crypte (ruines)
+      if(state.locationKey==='ruines' && state.flags.cryptUnlocked){
+        if(!labels.some(t=>/Crypte de Mirval/i.test(t))){
+          addChoice('→ Crypte de Mirval', eventCryptGate);
+        }
+      }
+
+    }catch(_){}
+  };
+
+  /* ------------------ 7) Garanties: fusion si 3 artefacts déjà présents ------------------ */
+  // Si au chargement du patch le joueur avait déjà 3 fragments d’artefact :
+  checkArtifactFusion();
+
+})();
