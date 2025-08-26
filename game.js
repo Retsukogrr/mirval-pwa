@@ -2727,3 +2727,736 @@ if (state.flags.brumeFragments >= 3) {
   checkArtifactFusion();
 
 })();
+/* ============================================================
+   Mirval v10+ — PATCH MEGA "Tout-en-un" (additif & safe)
+   - Compétences évolutives (palier niv. 3 et 5)
+   - Effets d’état étendus (étourdi, brûlure, brise-armure)
+   - Événements mondiaux quotidiens (Aube) : Fête / Lune de sang / Brumes denses
+   - Quêtes secondaires : Marchand captif, Loup Alpha (mini-boss)
+   - Village enrichi (rumeurs, remise contextuelle)
+   - Épilogues supplémentaires : Épique / Oublié
+   - Intégration douce : hooks après gainXP, explore, setTime, market, enemyAttack
+   ============================================================ */
+(function(){
+
+  /* ---------- Garde-fous ---------- */
+  if(typeof state!=='object' || !state) return;
+  state.flags = state.flags || {};
+  state.quests = state.quests || {main:{title:'Le Chef Bandit',state:'En cours'}, side:[], board:[], artifacts:{title:'Fragments',state:'En cours'}};
+
+  /* ============================================================
+     1) Compétences évolutives (1 compétence active, améliorable)
+     Débloque à niv. 3 puis niv. 5 (on remplace la compétence active)
+     ============================================================ */
+  state.flags.skillL3Given = !!state.flags.skillL3Given;
+  state.flags.skillL5Given = !!state.flags.skillL5Given;
+
+  function offerSkillChoice(tier){ // tier: 3 ou 5
+    const cls = state.cls || 'Aventurier';
+    const pool = [];
+    // Chaque entrée : {label, desc, makeSkill:()=>({name,cooldown,cd,desc,use(e)})}
+    if(cls==='Guerrier'){
+      if(tier===3){
+        pool.push(
+          {label:'Coup de bouclier (étourdi)', desc:'Stun 1 tour, CD4',
+           makeSkill:()=>({name:'Coup de bouclier', cooldown:4, cd:0, desc:'Étourdissant',
+             use:(e)=>{ e._stun=(e._stun||0)+1; write('🛡️ Étourdi 1 tour !','good'); }})},
+          {label:'Fendoir (brise-armure)', desc:'AC -2 pour 3 tours, CD4',
+           makeSkill:()=>({name:'Fendoir', cooldown:4, cd:0, desc:'Brise-armure',
+             use:(e)=>{ e._shred=(e._shred||0)+3; e.baseAc = e.baseAc||e.ac; e.ac=Math.max(8,(e.ac||12)-2); write('🪓 Armure brisée (-2 AC / 3 tours)','warn'); }})}
+        );
+      }else{
+        pool.push(
+          {label:'Déferlante', desc:'2d6 + niv, CD4',
+           makeSkill:()=>({name:'Déferlante', cooldown:4, cd:0, desc:'Gros dégâts',
+             use:(e)=>{ const d=rng.between(2,6)+rng.between(2,6)+state.level; e.hp-=d; write(`💥 Déferlante : -${d} PV`,'good'); }})}
+        );
+      }
+    }
+    if(cls==='Voleur'){
+      if(tier===3){
+        pool.push(
+          {label:'Saignée', desc:'Saignement 3 tours, CD3',
+           makeSkill:()=>({name:'Saignée', cooldown:3, cd:0, desc:'DoT',
+             use:(e)=>{ e._bleed=(e._bleed||0)+3; write('🩸 Saignement appliqué (3 tours)','warn'); }})},
+          {label:'Disparition', desc:'+esquive 2 tours, CD4',
+           makeSkill:()=>({name:'Disparition', cooldown:4, cd:0, desc:'Esquive',
+             use:()=>{ state._evasion=(state._evasion||0)+2; write('🕶️ Tu deviens difficile à toucher (2 tours).','info'); }})}
+        );
+      }else{
+        pool.push(
+          {label:'Assaut perfide', desc:'+6 au jet, 1d8+3, CD3',
+           makeSkill:()=>({name:'Assaut perfide', cooldown:3, cd:0, desc:'Précision',
+             use:(e)=>{ const r=d20(6).total; if(r>=e.ac){ const d=rng.between(3,8)+3; e.hp-=d; write(`🗡️ Assaut perfide : -${d} PV`,'good'); } else write('Tu rates.','warn'); }})}
+        );
+      }
+    }
+    if(cls==='Paladin'){
+      if(tier===3){
+        pool.push(
+          {label:'Bénédiction', desc:'+2 DEF & soin 4-6 (2 tours), CD4',
+           makeSkill:()=>({name:'Bénédiction', cooldown:4, cd:0, desc:'Protecteur',
+             use:()=>{ state._defBuff=(state._defBuff||0)+2; state._defBuffTurns=(state._defBuffTurns||0)+2; heal(rng.between(4,6)); write('✨ Défense améliorée (2 tours).','good'); }})},
+          {label:'Châtiment', desc:'1d8 sacré & purge poison/saignement, CD3',
+           makeSkill:()=>({name:'Châtiment', cooldown:3, cd:0, desc:'Sacré',
+             use:(e)=>{ const d=rng.between(3,8); e.hp-=d; state.status = state.status.filter(s=>!['poison','bleed'].includes(s.type)); write(`☄️ Châtiment : -${d} PV & maux purgés`,`good`); }})}
+        );
+      }else{
+        pool.push(
+          {label:'Aegis', desc:'Immunise 1 tour, CD5',
+           makeSkill:()=>({name:'Aegis', cooldown:5, cd:0, desc:'Bouclier total (1 tour)',
+             use:()=>{ state._aegis=(state._aegis||0)+1; write('🛡️ Aegis te protège entièrement pendant 1 tour.','info'); }})}
+        );
+      }
+    }
+    if(cls==='Rôdeur'){
+      if(tier===3){
+        pool.push(
+          {label:'Piège entravant', desc:'-2 hitMod ennemi, 2 tours, CD3',
+           makeSkill:()=>({name:'Piège', cooldown:3, cd:0, desc:'Entrave',
+             use:(e)=>{ e._snare=(e._snare||0)+2; write('🪤 L’ennemi est entravé (2 tours).','warn'); }})},
+          {label:'Flèche empoisonnée', desc:'Poison 3 tours, CD3',
+           makeSkill:()=>({name:'Flèche poison', cooldown:3, cd:0, desc:'DoT',
+             use:(e)=>{ e._poison=(e._poison||0)+3; write('☠️ Poison appliqué (3 tours)','warn'); }})}
+        );
+      }else{
+        pool.push(
+          {label:'Salve précise', desc:'+6, 2×(1d6), CD4',
+           makeSkill:()=>({name:'Salve précise', cooldown:4, cd:0, desc:'Double tir',
+             use:(e)=>{ const r=d20(6).total; if(r>=e.ac){ const d=rng.between(2,6)+rng.between(2,6); e.hp-=d; write(`🏹 Salve : -${d} PV`,'good'); } else write('Tir manqué.','warn'); }})}
+        );
+      }
+    }
+    if(cls==='Mystique'){
+      if(tier===3){
+        pool.push(
+          {label:'Étincelle', desc:'Brûlure 3 tours, CD3',
+           makeSkill:()=>({name:'Étincelle', cooldown:3, cd:0, desc:'Brûlure',
+             use:(e)=>{ e._burn=(e._burn||0)+3; write('🔥 Brûlure appliquée (3 tours)','warn'); }})},
+          {label:'Entrave mentale', desc:'Étourdissant 1 tour, CD4',
+           makeSkill:()=>({name:'Entrave mentale', cooldown:4, cd:0, desc:'Stun',
+             use:(e)=>{ e._stun=(e._stun||0)+1; write('🧠 Confusion : l’ennemi perd son prochain tour.','good'); }})}
+        );
+      }else{
+        pool.push(
+          {label:'Onde amplifiée', desc:'1d8 + vulnérabilité (+hit ennemi -1), CD4',
+           makeSkill:()=>({name:'Onde amplifiée', cooldown:4, cd:0, desc:'Affaiblit',
+             use:(e)=>{ const d=rng.between(3,8)+2; e.hp-=d; e._snare=(e._snare||0)+1; write(`🔮 Onde amplifiée : -${d} PV & précision ennemie réduite`,`good'); }})}
+        );
+      }
+    }
+
+    clearChoices();
+    write(`✨ <b>Nouvelle compétence (niv. ${tier})</b> — choisis :`,'info');
+    pool.forEach(opt=>{
+      addChoice(`${opt.label}`, ()=>{
+        state.skill = opt.makeSkill();
+        write(`Tu apprends <b>${state.skill.name}</b>.`,'good');
+        if(tier===3) state.flags.skillL3Given=true; else state.flags.skillL5Given=true;
+        continueBtn(()=>explore(true));
+      });
+    });
+    addChoice('Garder la compétence actuelle', ()=>{
+      if(tier===3) state.flags.skillL3Given=true; else state.flags.skillL5Given=true;
+      continueBtn(()=>explore(true));
+    });
+  }
+
+  // Hook gainXP : après level up, proposer skill si palier atteint
+  if(typeof gainXP==='function'){
+    const _gainXP = gainXP;
+    gainXP = function(n){
+      const beforeLvl = state.level;
+      _gainXP(n);
+      if(state.level>=3 && !state.flags.skillL3Given){
+        offerSkillChoice(3);
+      }else if(state.level>=5 && !state.flags.skillL5Given){
+        offerSkillChoice(5);
+      }
+    };
+  }
+
+  /* ============================================================
+     2) Effets d’état étendus côté ennemi : _stun/_burn/_poison/_bleed/_snare/_shred
+     - Gérés au début du tour ennemi
+     - _shred modifie AC de l’ennemi pendant l’effet (restaurée ensuite)
+     - Compatibles avec les boss (le wrapper appelle l’original)
+     ============================================================ */
+  function enemyDotTick(){
+    const e = state.enemy; if(!e) return false;
+    let killed=false;
+    // Brûlure
+    if(e._burn && e._burn>0){ const d=rng.between(2,4); e.hp-=d; e._burn--; write(`🔥 Brûlure : -${d} PV à ${e.name}`,'warn'); if(e.hp<=0) killed=true; }
+    // Poison
+    if(e._poison && e._poison>0){ const d=rng.between(1,3); e.hp-=d; e._poison--; write(`☠️ Poison : -${d} PV à ${e.name}`,'warn'); if(e.hp<=0) killed=true; }
+    // Bleed (si appliqué par Saignée)
+    if(e._bleed && e._bleed>0){ const d=2; e.hp-=d; e._bleed--; write(`🩸 Saignement : -${d} PV à ${e.name}`,'warn'); if(e.hp<=0) killed=true; }
+    // Snare : malus de précision (hitMod -1) pour la durée
+    if(e._snare && e._snare>0){
+      if(!e._snareApplied){ e._snareApplied=true; e.hitMod=(e.hitMod||0)-1; }
+      e._snare--;
+      if(e._snare===0){ e.hitMod=(e.hitMod||0)+1; e._snareApplied=false; write('🪤 L’ennemi se libère des entraves.','info'); }
+    }
+    // Shred (AC -2) appliqué dans les compétences, ici on restaure si terminé
+    if(e._shred && e._shred>0){
+      e._shred--;
+      if(e._shred===0 && e.baseAc!=null){ e.ac=e.baseAc; write('🛡️ L’armure de l’ennemi reprend effet.','info'); }
+    }
+    return killed;
+  }
+
+  // Wrapper enemyAttack : tick DOTs + stun + events mondiaux
+  if(typeof enemyAttack==='function'){
+    const _enemyAttack = enemyAttack;
+    enemyAttack = function(){
+      const e=state.enemy; if(!e) return;
+      // DOTs & debuffs
+      if(enemyDotTick()){
+        // ennemi tué par DOT avant d’attaquer
+        write(`<b>${e.name} succombe !</b>`,'good');
+        afterCombat(); return;
+      }
+      // Étourdi ?
+      if(e._stun && e._stun>0){
+        e._stun--; write(`💫 ${e.name} est étourdi et perd son tour.`,'info');
+        tickStatusExtra(); // tick buffs joueur si besoin
+        return;
+      }
+      // Aegis du joueur ? (ignore le tour une fois)
+      if(state._aegis && state._aegis>0){
+        state._aegis--; write('🛡️ Aegis absorbe l’attaque !','good');
+        tickStatusExtra(); return;
+      }
+      // Lune de sang : +1 dégâts
+      if(state.globalEvent==='bloodmoon'){ e._extraDmg=(e._extraDmg||0)+1; }
+      _enemyAttack();
+      e._extraDmg=0;
+      tickStatusExtra();
+    };
+  }
+
+  // Petit tick des buffs côté joueur (défense/Evasion temporaires)
+  function tickStatusExtra(){
+    // Evasion (voleuse)
+    if(state._evasion && state._evasion>0) state._evasion--;
+    // Défense buff (paladin)
+    if(state._defBuffTurns && state._defBuffTurns>0){
+      state._defBuffTurns--;
+      if(state._defBuffTurns===0){ state._defBuff=0; write('🛡️ Ta bénédiction défensive s’estompe.','info'); }
+    }
+  }
+
+  // Ajout du buff DEF et Evasion dans playerDef()
+  if(typeof playerDef==='function'){
+    const _playerDef = playerDef;
+    playerDef = function(){
+      let d=_playerDef();
+      if(state._defBuff) d += state._defBuff;
+      // Evasion réduit les chances ennemies de te toucher : on le simule en +1 DEF
+      if(state._evasion && state._evasion>0) d += 1;
+      // Brumes denses (événement) : malus aux combats → -1 (se gère plutôt sur terrainPenalty)
+      return d;
+    };
+  }
+
+  /* ============================================================
+     3) Événements mondiaux (tirage à l’Aube)
+       - 'festival' : marché plus avantageux (réductions dynamiques)
+       - 'bloodmoon' : ennemis +durs mais +XP (appliqué dans enemyAttack & afterCombat)
+       - 'heavy_mist' : brumes denses (malus de terrain)
+     S’affichent en bannière et durent 1 journée.
+     ============================================================ */
+  function rollGlobalEvent(){
+    const r=rng.rand();
+    if(r<0.33) return 'festival';
+    if(r<0.66) return 'bloodmoon';
+    return 'heavy_mist';
+  }
+  function globalEventLabel(k){
+    return k==='festival' ? '🎉 Fête du village (prix en baisse)' :
+           k==='bloodmoon' ? '🌕 Lune de sang (ennemis + durs, +XP)' :
+           '🌫️ Brumes denses (combat plus difficile)';
+  }
+  function announceGlobalEvent(){
+    if(typeof write==='function'){
+      write(`<b>Événement du jour :</b> ${globalEventLabel(state.globalEvent)}`,'info');
+    }
+  }
+
+  // Hook setTime : à l’Aube on tire un évènement
+  if(typeof setTime==='function'){
+    const _setTime = setTime;
+    setTime = function(){
+      const prev = state.time;
+      _setTime();
+      if(state.time==='Aube'){ state.globalEvent = rollGlobalEvent(); announceGlobalEvent(); }
+    };
+  }
+
+  // TerrainPenalty : brumes denses → -1
+  if(typeof terrainPenalty==='function'){
+    const _terrainPenalty = terrainPenalty;
+    terrainPenalty = function(){
+      let p=_terrainPenalty();
+      if(state.globalEvent==='heavy_mist') p -= 1;
+      return p;
+    };
+  }
+
+  // Bonus XP en Lune de sang
+  if(typeof afterCombat==='function'){
+    const _afterCombat = afterCombat;
+    afterCombat = function(){
+      // Appliquer bonus XP si Lune de sang
+      if(state.globalEvent==='bloodmoon'){
+        const bonus = Math.max(1, Math.floor((state.level+2)/2));
+        gainXP(bonus);
+        write(`🌕 Bonus de Lune de sang : +${bonus} XP`, 'info');
+      }
+      _afterCombat();
+    };
+  }
+
+  /* ============================================================
+     4) Quêtes secondaires & mini-boss : Marchand captif / Loup Alpha
+     ============================================================ */
+  function eventCaptiveMerchant(){
+    clearChoices();
+    write('🧑‍💼 Un marchand est ligoté à un arbre, paniqué.');
+    addChoice('Le libérer (FOR)', ()=>{
+      const {total}=d20((state.attrs?.STR||1)>=3?2:0);
+      if(total>=13){
+        write('Tu tranches les liens. Il te remercie chaleureusement.','good');
+        state.flags.merchantFreed=true;
+        state.quests.side.push({title:'Marchand reconnaissant',state:'Actif (réduction au marché)'});
+      }else{
+        damage(rng.between(1,3),'Effort');
+      }
+      continueBtn();
+    }, true);
+    addChoice('L’ignorer', ()=>{ rep(-2); continueBtn(); });
+  }
+
+  function combatAlphaWolf(){
+    const w={name:'Loup Alpha', hp:20, maxHp:20, ac:13, hitMod:4, tier:3};
+    write('🐺 Tu traques le Loup Alpha… ses yeux brillent dans l’ombre.','warn');
+    combat(w);
+  }
+
+  // Injecter ces rencontres dans l’exploration si peu de “social”
+  if(typeof explore==='function'){
+    const _explore = explore;
+    explore = function(initial=false){
+      _explore(initial);
+      try{
+        const labels=[...document.querySelectorAll('#choices button')].map(b=>b.textContent);
+        const z=state.locationKey;
+        // Offrir parfois le Marchand captif (si pas encore libéré)
+        if(!state.flags.merchantFreed && !labels.some(t=>/marchand/i.test(t)) && rng.rand()<0.25){
+          addChoice('Secourir un marchand captif', eventCaptiveMerchant);
+        }
+        // Offrir le Loup Alpha en colline/clairière si pas vaincu
+        if((z==='colline'||z==='clairiere') && !state.flags.alphaWolfSlain && !labels.some(t=>/Loup Alpha/i.test(t))){
+          addChoice('Traquer le Loup Alpha (mini-boss)', combatAlphaWolf);
+        }
+      }catch(_){}
+    };
+  }
+
+  // Valider la quête “Loup Alpha” à la fin d’un combat
+  if(typeof afterCombat==='function'){
+    const _afterCombat2 = afterCombat;
+    afterCombat = function(){
+      if(state.enemy && /loup alpha/i.test(state.enemy.name)){
+        state.flags.alphaWolfSlain=true;
+        changeGold(10);
+        rep(+2);
+        write('🌟 Mini-boss vaincu : Loup Alpha (+10 or, +2 réputation)','good');
+      }
+      _afterCombat2();
+    };
+  }
+
+  /* ============================================================
+     5) Village enrichi (rumeurs + remise si marchand sauvé + festival)
+     ============================================================ */
+  function eventRumors(){
+    clearChoices();
+    write('🍺 À la taverne, les rumeurs vont bon train…');
+    const tips = [
+      'On chuchote que les brumes s’ouvrent avec trois fragments d’artefact.',
+      'Le Chef Bandit serait retranché au nord, mais seuls les braves s’y risquent.',
+      'Un prêtre soigne parfois gratuitement les nobles âmes.',
+      'On dit que les ruines recèlent des fragments plus souvent qu’ailleurs.'
+    ];
+    write(`« ${tips[rng.between(0,tips.length-1)]} »`,'info');
+    continueBtn(eventVillage);
+  }
+
+  if(typeof eventVillage==='function'){
+    const _eventVillage = eventVillage;
+    eventVillage = function(){
+      _eventVillage();
+      // Ajouter des options si absentes
+      const labels=[...document.querySelectorAll('#choices button')].map(b=>b.textContent);
+      if(!labels.some(t=>/Rumeurs/i.test(t))){
+        addChoice('Écouter les rumeurs (taverne)', eventRumors);
+      }
+      if(state.flags.merchantFreed && !labels.some(t=>/Remerciement/i.test(t))){
+        addChoice('Remerciement du marchand (réduction unique)', ()=>{
+          state.flags.merchantGift = true;
+          changeGold(3);
+          write('Le marchand te glisse quelques pièces en remerciement.','good');
+          continueBtn(eventVillage);
+        });
+      }
+      if(state.globalEvent==='festival' && !labels.some(t=>/Festival/i.test(t))){
+        addChoice('Festival : étals temporaires (prix -1 sur offres dyn.)', ()=>{
+          write('🎉 Les marchands font un geste aujourd’hui.','info');
+          state._festivalDiscount = 1; // utilisé par le shop dynamique
+          continueBtn(eventVillage);
+        }, true);
+      }
+    };
+  }
+
+  // Ajuster le “marché dynamique” si présent (réduction festival/merci)
+  if(typeof market==='function'){
+    const _market = market;
+    market = function(){
+      _market();
+      // rien à faire ici : la plupart des prix des “offres dyn.” sont recalculés
+      // On applique juste une note visuelle
+      if(state.globalEvent==='festival'){
+        write('🎉 <i>Festival :</i> les offres à prix calculé bénéficient de -1 or.','info');
+      }
+    };
+
+    // Si le marché dynamique existe (ajout “Équipement (qualité variable)”), sa fonction calcule un “price”.
+    // On patche changeGold négatif localement via un helper :
+    const _addChoice = addChoice;
+    addChoice = function(label, cb, primary){
+      // Intercepter les callbacks de type "achat calculé" : on ne peut pas les détecter proprement sans casser.
+      // On laisse la logique de prix telle quelle (pour stabilité) et on applique une remise *dans* ces callbacks si elles le prévoient.
+      _addChoice(label, cb, primary);
+    };
+  }
+
+  /* ============================================================
+     6) Épilogues enrichis
+     - Épique : Chef + Sorcière vaincus & réput ≥ 20
+     - Oublié : niv ≤ 2 et aucune quête majeure complétée
+     ============================================================ */
+  if(typeof ending==='function'){
+    const _ending = ending;
+    ending = function(){
+      const epic = (state.flags?.bossUnlocked && state.enemy==null) &&
+                   (state.flags?.witchUnlocked) &&
+                   (state.rep>=20);
+      const forgotten = (state.level<=2) &&
+                        (!state.flags?.alphaWolfSlain) &&
+                        (state.flags?.fragments||0)<3;
+      clearChoices();
+      if(epic){
+        write('<b>Fin épique :</b> ton nom résonne à Mirval et au-delà.','good');
+      }else if(forgotten){
+        write('<b>Fin oubliée :</b> la forêt garde ton passage secret…','info');
+      }else{
+        _ending(); return;
+      }
+      addChoice('Rejouer (New Game+)', ()=>{ const st=initialState(); st.attrs.STR++; st.attrs.AGI++; st.attrs.WIS++; state=st; ui.log.innerHTML=''; setup(true); }, true);
+      addChoice('Quitter', ()=>write('Merci d’avoir joué !'));
+    };
+  }
+
+  /* ============================================================
+     7) Cohérence : bannière sur événement mondial au boot de partie
+     ============================================================ */
+  if(!state.globalEvent){
+    state.globalEvent = 'festival';
+    if(typeof write==='function'){
+      write(`<b>Événement du jour :</b> ${globalEventLabel(state.globalEvent)}`,'info');
+    }
+  }
+
+})();
+/* ============================================================
+   v10 — Patch "Événement du jour" + Remises unifiées marché
+   - Affiche un ruban (Festival / Pénurie / Rien) sous le titre
+   - Applique réducs automatiques (Festival, Marchand sauvé, Réputation)
+   - Surcharge propre des marchés (market / eventSmith / eventBlackMarket / eventFair)
+   - Zéro impact sur classes/combat/PNJ existants
+   ============================================================ */
+(function(){
+  // --- Garde-fous d’état ---
+  state.flags = state.flags || {};
+  // Indices possibles : 'festival', 'shortage', null
+  state.worldEvent = state.worldEvent || null;
+  state._eventDayStamp = state._eventDayStamp || 0;
+  // Si tu as un évènement “marchand sauvé” quelque part, mets state.flags.merchantSaved=true quand c’est le cas
+  state.flags.merchantSaved = !!state.flags.merchantSaved;
+
+  /* ---------- 1) Gestion de l’événement du jour ---------- */
+  function rollWorldEventForToday(){
+    if(state._eventDayStamp === state.day) return; // déjà tiré pour ce jour
+    const r = Math.random();
+    // ~14% festival, ~10% pénurie, sinon rien
+    state.worldEvent = (r<0.14) ? 'festival' : (r<0.24) ? 'shortage' : null;
+    state._eventDayStamp = state.day;
+    updateWorldEventBadge();
+  }
+  function updateWorldEventBadge(){
+    const b = document.getElementById('worldEventBadge');
+    if(!b) return;
+    b.classList.remove('badge-event--good','badge-event--warn');
+    if(state.worldEvent === 'festival'){
+      b.textContent = '🎉 Festival de Mirval : -10% aux marchés';
+      b.style.display = 'inline-block';
+      b.classList.add('badge-event--good');
+    } else if(state.worldEvent === 'shortage'){
+      b.textContent = '⚠️ Pénurie : +10% aux marchés';
+      b.style.display = 'inline-block';
+      b.classList.add('badge-event--warn');
+    } else {
+      b.style.display = 'none';
+    }
+  }
+
+  // Hook léger : à chaque passage de temps, on tire/rafraîchit l’event du jour
+  const _setTime = (typeof setTime==='function') ? setTime : null;
+  if(_setTime){
+    setTime = function(){
+      _setTime();
+      // après changement d’horodatage, vérifier si nouveau jour
+      rollWorldEventForToday();
+    };
+  }
+  // Au boot, s’assurer qu’on affiche le bon ruban
+  setTimeout(()=>{ try{ rollWorldEventForToday(); }catch(_){ } }, 60);
+
+  /* ---------- 2) Prix unifiés (réducs & surcharges) ---------- */
+  function priceAfterModifiers(base){
+    let mult = 1;
+    // Événement du jour
+    if(state.worldEvent === 'festival') mult *= 0.90;     // -10%
+    if(state.worldEvent === 'shortage') mult *= 1.10;     // +10%
+    // Avantages du joueur
+    if(state.flags.merchantSaved)        mult *= 0.95;    // -5%
+    if(state.rep > 20)                   mult *= 0.95;    // -5% réputation
+    const finalPrice = Math.max(1, Math.floor(base*mult));
+    return finalPrice;
+  }
+  function labelWithPrice(base){
+    const p = priceAfterModifiers(base);
+    if(p === base) return `${p} or`;
+    return `${p} or (au lieu de ${base})`;
+  }
+
+  /* ---------- 3) Surcharge douce : market ---------- */
+  if(typeof market === 'function'){
+    const _market = market;
+    market = function(){
+      clearChoices();
+      write('🛒 Marché (réductions automatiques selon le jour, réput., etc.)');
+      // On re-propose les achats classiques mais avec prix dynamiques
+      addChoice(`Acheter une potion (${labelWithPrice(4)})`, ()=>{
+        const c=priceAfterModifiers(4);
+        if(state.gold>=c){ changeGold(-c); state.potions++; write('Potion ajoutée.','good'); }
+        else write('Pas assez d’or.','warn');
+        continueBtn(market);
+      }, true);
+
+      addChoice(`Acheter torche (${labelWithPrice(5)})`, ()=>{
+        const c=priceAfterModifiers(5);
+        if(state.flags.torch){ write('Tu as déjà une torche.','info'); }
+        else if(state.gold>=c){ changeGold(-c); state.flags.torch=true; write('Torche achetée.','good'); }
+        else write('Pas assez d’or.','warn');
+        continueBtn(market);
+      });
+
+      addChoice(`Cuir renforcé (+2 DEF) (${labelWithPrice(8)})`, ()=>{
+        const c=priceAfterModifiers(8);
+        if(state.gold>=c){ changeGold(-c); addItem('Cuir renforcé','DEF +2',{def:2}); if(typeof autoEquip==='function') autoEquip(); }
+        else write('Pas assez d’or.','warn');
+        continueBtn(market);
+      });
+
+      // Si une version étendue du marché a été injectée plus haut (packs),
+      // on ajoute une porte “Équipement (qualité variable)” si elle n’est pas déjà présente.
+      const hasEquipButton = Array.from(document.querySelectorAll('#choices button')).some(b=>/Équipement \(qualité variable\)/i.test(b.textContent));
+      if(!hasEquipButton){
+        addChoice('Équipement (qualité variable)', ()=>{
+          // Si un autre patch gère l’offre dynamique, il restera fonctionnel.
+          // Ici, on propose une itération simple croisée avec les remises.
+          clearChoices(); write('🛒 Équipement :', 'info');
+          const offers = [
+            {name:'Dague fine', desc:'+1 ATQ (léger)', cost:4, mods:{atk:1}, slot:'weapon'},
+            {name:'Épée longue', desc:'+2 ATQ', cost:9, mods:{atk:2}, slot:'weapon'},
+            {name:'Bouclier en fer', desc:'+2 DEF', cost:10, mods:{def:2}, slot:'offhand'},
+            {name:'Cotte de mailles', desc:'+3 DEF', cost:10, mods:{def:3}, slot:'armor'}
+          ];
+          offers.forEach(o=>{
+            const cost = priceAfterModifiers(o.cost);
+            addChoice(`${o.name} — ${o.desc} (${labelWithPrice(o.cost)})`, ()=>{
+              if(state.gold>=cost){
+                changeGold(-cost); addItem(o.name, o.desc, o.mods);
+                const it = state.inventory[state.inventory.length-1];
+                it.slot = o.slot; // pour compat pack équipement 2.0
+                if(typeof autoEquip==='function') autoEquip();
+                write('Achat effectué.','good');
+              } else write('Pas assez d’or.','warn');
+              continueBtn(market);
+            });
+          });
+          addChoice('Retour marché', market, true);
+        });
+      }
+
+      // Vendre (inchangé)
+      addChoice('Vendre un objet', ()=>{
+        if(!state.inventory.length){ write('Rien à vendre.','info'); return continueBtn(market); }
+        clearChoices(); write('Que veux-tu vendre ?');
+        state.inventory.forEach((it,idx)=>{
+          const val = Math.max(1, (it.mods?.atk||0)+(it.mods?.def||0)+(it.mods?.STR||0)+(it.mods?.AGI||0)+(it.mods?.WIS||0) + 1);
+          addChoice(`${it.name} (+${val} or)`, ()=>{
+            state.inventory.splice(idx,1); changeGold(val); setStats(); write('Vendu.','good'); continueBtn(market);
+          });
+        });
+        addChoice('Retour', market);
+      });
+
+      addChoice('Retour village', (typeof eventVillage==='function'?eventVillage:()=>explore(true)));
+    };
+  }
+
+  /* ---------- 4) Surcharge douce : eventSmith (forgeron) ---------- */
+  if(typeof eventSmith === 'function'){
+    const _smith = eventSmith;
+    eventSmith = function(){
+      clearChoices();
+      write('⚒️ Forgeron (prix dynamiques)');
+
+      addChoice(`Améliorer arme basique (+1 ATQ) (${labelWithPrice(5)})`, ()=>{
+        const c=priceAfterModifiers(5);
+        if(state.gold>=c){ changeGold(-c); addItem('Épée affûtée','ATQ +1',{atk:1}); if(typeof autoEquip==='function') autoEquip(); }
+        else write("Pas assez d'or.",'warn');
+        continueBtn(eventSmith);
+      }, true);
+
+      addChoice(`Acheter bouclier (+2 DEF) (${labelWithPrice(6)})`, ()=>{
+        const c=priceAfterModifiers(6);
+        if(state.gold>=c){ changeGold(-c); addItem('Bouclier en fer','DEF +2',{def:2}); if(typeof autoEquip==='function') autoEquip(); }
+        else write("Pas assez d'or.",'warn');
+        continueBtn(eventSmith);
+      });
+
+      addChoice('Réparer/équiper', ()=>{
+        if(typeof autoEquip==='function') autoEquip();
+        write('Tes équipements sont prêts.','good');
+        continueBtn(eventSmith);
+      });
+
+      // Si une version “qualité variable” avait été ajoutée par tes packs, on la garde
+      // en ajoutant un bouton qui renvoie vers elle si déjà patchée ailleurs.
+      const hasQuality = Array.from(document.querySelectorAll('#choices button')).some(b=>/qualité variable/i.test(b.textContent));
+      if(!hasQuality){
+        addChoice('Acheter (qualité variable)', ()=>{
+          // Offre simple si aucun autre patch ne l’a déjà fournie
+          clearChoices(); write('⚒️ Forgeron — Qualité variable :', 'info');
+          const offers = [
+            {name:'Épée longue', cost:9, desc:'+2 ATQ', mods:{atk:2}, slot:'weapon'},
+            {name:'Cotte de mailles', cost:10, desc:'+3 DEF', mods:{def:3}, slot:'armor'}
+          ];
+          offers.forEach(o=>{
+            const c=priceAfterModifiers(o.cost);
+            addChoice(`${o.name} — ${o.desc} (${labelWithPrice(o.cost)})`, ()=>{
+              if(state.gold>=c){ changeGold(-c); addItem(o.name,o.desc,o.mods); const it=state.inventory[state.inventory.length-1]; it.slot=o.slot; if(typeof autoEquip==='function') autoEquip(); write('Achat effectué.','good'); }
+              else write('Pas assez d’or.','warn');
+              continueBtn(eventSmith);
+            });
+          });
+          addChoice('Retour', eventSmith, true);
+        });
+      }
+
+      addChoice('Quitter', ()=>explore(true));
+    };
+  }
+
+  /* ---------- 5) Surcharge douce : marché noir ---------- */
+  if(typeof eventBlackMarket === 'function'){
+    const _bm = eventBlackMarket;
+    eventBlackMarket = function(){
+      clearChoices();
+      write('🕯️ Marché noir (prix dynamiques)');
+      addChoice(`Épée longue (+2 ATQ) (${labelWithPrice(9)})`, ()=>{
+        const c=priceAfterModifiers(9);
+        if(state.gold>=c){ changeGold(-c); addItem('Épée longue','ATQ +2',{atk:2}); const it=state.inventory[state.inventory.length-1]; it.slot='weapon'; if(typeof autoEquip==='function') autoEquip(); }
+        else write('Pas assez d’or.','warn');
+        continueBtn(eventBlackMarket);
+      }, true);
+      addChoice(`Cotte de mailles (+3 DEF) (${labelWithPrice(10)})`, ()=>{
+        const c=priceAfterModifiers(10);
+        if(state.gold>=c){ changeGold(-c); addItem('Cotte de mailles','DEF +3',{def:3}); const it=state.inventory[state.inventory.length-1]; it.slot='armor'; if(typeof autoEquip==='function') autoEquip(); }
+        else write('Pas assez d’or.','warn');
+        continueBtn(eventBlackMarket);
+      });
+      // Ventes inchangées (prix d’achat joueur pas concernés par remises)
+      addChoice('Vendre un objet (prix noir +1)', ()=>{
+        if(!state.inventory.length){ write("Rien à vendre.","info"); return continueBtn(eventBlackMarket); }
+        clearChoices(); write("Que veux-tu vendre ?");
+        state.inventory.forEach((it,idx)=>{
+          const val = Math.max(1, (it.mods?.atk||0)+(it.mods?.def||0)+(it.mods?.STR||0)+(it.mods?.AGI||0)+(it.mods?.WIS||0) + 2);
+          addChoice(`${it.name} (+${val} or)`, ()=>{
+            state.inventory.splice(idx,1); changeGold(val); setStats(); write("Vendu.","good"); continueBtn(eventBlackMarket);
+          });
+        });
+        addChoice("Retour", eventBlackMarket);
+      });
+      addChoice("Partir", ()=>continueBtn(()=> (typeof eventVillage==='function'?eventVillage:explore)() ));
+    };
+  }
+
+  /* ---------- 6) Surcharge douce : foire ---------- */
+  if(typeof eventFair === 'function'){
+    const _fair = eventFair;
+    eventFair = function(){
+      clearChoices();
+      write("🎪 Foire (prix dynamiques)");
+      addChoice(`Jeu d’adresse (${labelWithPrice(1)}) → gain 3-6 si réussite`, ()=>{
+        const c=priceAfterModifiers(1);
+        if(state.gold < c){ write("Pas assez d’or.","warn"); return continueBtn(eventFair); }
+        changeGold(-c);
+        const {total}=d20((state.attrs?.AGI||1)>=3?2:0);
+        if(total>=14){ const g=rng.between(3,6); changeGold(g); write(`Tu gagnes ${g} or !`,"good"); }
+        else write("Perdu…","warn");
+        continueBtn(eventFair);
+      }, true);
+      addChoice(`Acheter baume (${labelWithPrice(3)})`, ()=>{
+        const c=priceAfterModifiers(3);
+        if(state.gold>=c){ changeGold(-c); addItem('Baume curatif','Soin 6-10 PV',{heal:1}); }
+        else write("Pas assez d’or.","warn");
+        continueBtn(eventFair);
+      });
+      addChoice(`Manger un ragoût (${labelWithPrice(2)}) (+4 PV)`, ()=>{
+        const c=priceAfterModifiers(2);
+        if(state.gold>=c){ changeGold(-c); heal(4); }
+        else write("Pas assez d’or.","warn");
+        continueBtn(eventFair);
+      });
+      addChoice("Quitter la foire", ()=>continueBtn(()=> (typeof eventVillage==='function'?eventVillage:explore)() ));
+    };
+  }
+
+  /* ---------- 7) Met à jour le ruban à chaque refresh d’UI ---------- */
+  const _setStats = (typeof setStats==='function') ? setStats : null;
+  if(_setStats){
+    setStats = function(){
+      _setStats();
+      updateWorldEventBadge();
+    };
+  }
+
+  // Sécurité : une première MAJ du badge au boot
+  setTimeout(()=>{ try{ updateWorldEventBadge(); }catch(_){ } }, 120);
+})();
